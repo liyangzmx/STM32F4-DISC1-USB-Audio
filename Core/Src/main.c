@@ -45,6 +45,7 @@
 I2C_HandleTypeDef hi2c1;
 
 I2S_HandleTypeDef hi2s3;
+DMA_HandleTypeDef hdma_spi3_tx;
 
 osThreadId defaultTaskHandle;
 /* USER CODE BEGIN PV */
@@ -54,6 +55,7 @@ osThreadId defaultTaskHandle;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2S3_Init(void);
 void StartDefaultTask(void const * argument);
@@ -96,6 +98,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_I2C1_Init();
   MX_I2S3_Init();
   /* USER CODE BEGIN 2 */
@@ -242,10 +245,10 @@ static void MX_I2S3_Init(void)
   hi2s3.Init.Standard = I2S_STANDARD_PHILIPS;
   hi2s3.Init.DataFormat = I2S_DATAFORMAT_16B;
   hi2s3.Init.MCLKOutput = I2S_MCLKOUTPUT_ENABLE;
-  hi2s3.Init.AudioFreq = I2S_AUDIOFREQ_96K;
+  hi2s3.Init.AudioFreq = I2S_AUDIOFREQ_48K;
   hi2s3.Init.CPOL = I2S_CPOL_LOW;
   hi2s3.Init.ClockSource = I2S_CLOCK_PLL;
-  hi2s3.Init.FullDuplexMode = I2S_FULLDUPLEXMODE_DISABLE;
+  hi2s3.Init.FullDuplexMode = I2S_FULLDUPLEXMODE_ENABLE;
   if (HAL_I2S_Init(&hi2s3) != HAL_OK)
   {
     Error_Handler();
@@ -253,6 +256,22 @@ static void MX_I2S3_Init(void)
   /* USER CODE BEGIN I2S3_Init 2 */
 
   /* USER CODE END I2S3_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
 
 }
 
@@ -290,6 +309,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(CS_I2C_SPI_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : PC0 PC3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_3;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF10_OTG_HS;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_EVT_RISING;
@@ -310,6 +337,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(BOOT1_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : PB10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF10_OTG_HS;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
   /*Configure GPIO pins : LD4_Pin LD3_Pin LD5_Pin LD6_Pin
                            Audio_RST_Pin */
   GPIO_InitStruct.Pin = LD4_Pin|LD3_Pin|LD5_Pin|LD6_Pin
@@ -318,20 +353,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : VBUS_FS_Pin */
-  GPIO_InitStruct.Pin = VBUS_FS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(VBUS_FS_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : OTG_FS_ID_Pin OTG_FS_DM_Pin OTG_FS_DP_Pin */
-  GPIO_InitStruct.Pin = OTG_FS_ID_Pin|OTG_FS_DM_Pin|OTG_FS_DP_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStruct.Alternate = GPIO_AF10_OTG_FS;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : OTG_FS_OverCurrent_Pin */
   GPIO_InitStruct.Pin = OTG_FS_OverCurrent_Pin;

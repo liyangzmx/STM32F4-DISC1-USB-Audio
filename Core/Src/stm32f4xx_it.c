@@ -55,7 +55,8 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-extern PCD_HandleTypeDef hpcd_USB_OTG_HS;
+extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
+extern DMA_HandleTypeDef hdma_spi3_tx;
 extern TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN EV */
@@ -161,6 +162,20 @@ void DebugMon_Handler(void)
 /******************************************************************************/
 
 /**
+  * @brief This function handles DMA1 stream5 global interrupt.
+  */
+void DMA1_Stream5_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Stream5_IRQn 0 */
+
+  /* USER CODE END DMA1_Stream5_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_spi3_tx);
+  /* USER CODE BEGIN DMA1_Stream5_IRQn 1 */
+
+  /* USER CODE END DMA1_Stream5_IRQn 1 */
+}
+
+/**
   * @brief This function handles TIM1 update interrupt and TIM10 global interrupt.
   */
 void TIM1_UP_TIM10_IRQHandler(void)
@@ -175,17 +190,17 @@ void TIM1_UP_TIM10_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles USB On The Go HS global interrupt.
+  * @brief This function handles USB On The Go FS global interrupt.
   */
-void OTG_HS_IRQHandler(void)
+void OTG_FS_IRQHandler(void)
 {
-  /* USER CODE BEGIN OTG_HS_IRQn 0 */
+  /* USER CODE BEGIN OTG_FS_IRQn 0 */
 
-  /* USER CODE END OTG_HS_IRQn 0 */
-  HAL_PCD_IRQHandler(&hpcd_USB_OTG_HS);
-  /* USER CODE BEGIN OTG_HS_IRQn 1 */
+  /* USER CODE END OTG_FS_IRQn 0 */
+  HAL_PCD_IRQHandler(&hpcd_USB_OTG_FS);
+  /* USER CODE BEGIN OTG_FS_IRQn 1 */
 
-  /* USER CODE END OTG_HS_IRQn 1 */
+  /* USER CODE END OTG_FS_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
