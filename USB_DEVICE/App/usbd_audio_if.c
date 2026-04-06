@@ -22,6 +22,7 @@
 #include "usbd_audio_if.h"
 
 /* USER CODE BEGIN INCLUDE */
+#include "main.h"
 
 /* USER CODE END INCLUDE */
 
@@ -62,6 +63,24 @@
   */
 
 /* USER CODE BEGIN PRIVATE_DEFINES */
+#define CS43L22_I2C_ADDR              (0x4AU << 1)
+#define CS43L22_OUTPUT_HEADPHONE      0xAFU
+#define CS43L22_I2C_TIMEOUT_MS        100U
+
+#define CS43L22_REG_POWER_CTL1        0x02U
+#define CS43L22_REG_POWER_CTL2        0x04U
+#define CS43L22_REG_CLOCKING_CTL      0x05U
+#define CS43L22_REG_INTERFACE_CTL1    0x06U
+#define CS43L22_REG_ANALOG_ZC_SR_SETT 0x0AU
+#define CS43L22_REG_MISC_CTL          0x0EU
+#define CS43L22_REG_LIMIT_CTL1        0x27U
+#define CS43L22_REG_TONE_CTL          0x1FU
+#define CS43L22_REG_MASTER_A_VOL      0x20U
+#define CS43L22_REG_MASTER_B_VOL      0x21U
+#define CS43L22_REG_HEADPHONE_A_VOL   0x22U
+#define CS43L22_REG_HEADPHONE_B_VOL   0x23U
+#define CS43L22_REG_PCMA_VOL          0x1AU
+#define CS43L22_REG_PCMB_VOL          0x1BU
 
 /* USER CODE END PRIVATE_DEFINES */
 
@@ -88,6 +107,9 @@
   */
 
 /* USER CODE BEGIN PRIVATE_VARIABLES */
+static uint8_t audio_muted = 0U;
+static uint8_t codec_initialized = 0U;
+static uint8_t codec_playing = 0U;
 
 /* USER CODE END PRIVATE_VARIABLES */
 
@@ -103,6 +125,8 @@
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* USER CODE BEGIN EXPORTED_VARIABLES */
+extern I2C_HandleTypeDef hi2c1;
+extern I2S_HandleTypeDef hi2s3;
 
 /* USER CODE END EXPORTED_VARIABLES */
 
@@ -124,6 +148,14 @@ static int8_t AUDIO_PeriodicTC_FS(uint8_t *pbuf, uint32_t size, uint8_t cmd);
 static int8_t AUDIO_GetState_FS(void);
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
+static int8_t CS43L22_Init(uint8_t volume);
+static void CS43L22_DeInit(void);
+static int8_t CS43L22_Play(void);
+static int8_t CS43L22_Stop(void);
+static int8_t CS43L22_SetVolume(uint8_t volume);
+static int8_t CS43L22_SetMute(uint8_t muted);
+static int8_t CS43L22_Write(uint8_t reg, uint8_t value);
+static uint8_t CS43L22_ConvertVolume(uint8_t volume);
 
 /* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
 
@@ -153,9 +185,18 @@ USBD_AUDIO_ItfTypeDef USBD_AUDIO_fops_FS =
 static int8_t AUDIO_Init_FS(uint32_t AudioFreq, uint32_t Volume, uint32_t options)
 {
   /* USER CODE BEGIN 0 */
-  UNUSED(AudioFreq);
-  UNUSED(Volume);
   UNUSED(options);
+
+  if (AudioFreq != USBD_AUDIO_FREQ)
+  {
+    return (USBD_FAIL);
+  }
+
+  if (CS43L22_Init((uint8_t)Volume) != USBD_OK)
+  {
+    return (USBD_FAIL);
+  }
+
   return (USBD_OK);
   /* USER CODE END 0 */
 }
@@ -169,6 +210,10 @@ static int8_t AUDIO_DeInit_FS(uint32_t options)
 {
   /* USER CODE BEGIN 1 */
   UNUSED(options);
+  (void)HAL_I2S_DMAStop(&hi2s3);
+  codec_playing = 0U;
+  (void)CS43L22_Stop();
+  CS43L22_DeInit();
   return (USBD_OK);
   /* USER CODE END 1 */
 }
@@ -183,18 +228,45 @@ static int8_t AUDIO_DeInit_FS(uint32_t options)
 static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
 {
   /* USER CODE BEGIN 2 */
+  HAL_StatusTypeDef status = HAL_OK;
+
   switch(cmd)
   {
     case AUDIO_CMD_START:
+      if (CS43L22_Play() != USBD_OK)
+      {
+        return (USBD_FAIL);
+      }
+
+      if (codec_playing == 0U)
+      {
+        status = HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t *)pbuf,
+                                      AUDIO_TOTAL_BUF_SIZE / sizeof(uint16_t));
+        codec_playing = (status == HAL_OK) ? 1U : 0U;
+      }
     break;
 
     case AUDIO_CMD_PLAY:
+      /*
+       * DMA is circular over the USB audio ring buffer; the USB stack keeps
+       * filling the inactive half while I2S drains the active half.
+       */
+      UNUSED(pbuf);
+      UNUSED(size);
+    break;
+
+    case AUDIO_CMD_STOP:
+      status = HAL_I2S_DMAStop(&hi2s3);
+      codec_playing = 0U;
+      (void)CS43L22_Stop();
+    break;
+
+    default:
+      status = HAL_ERROR;
     break;
   }
-  UNUSED(pbuf);
-  UNUSED(size);
-  UNUSED(cmd);
-  return (USBD_OK);
+
+  return (status == HAL_OK) ? (USBD_OK) : (USBD_FAIL);
   /* USER CODE END 2 */
 }
 
@@ -206,8 +278,7 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
 static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
 {
   /* USER CODE BEGIN 3 */
-  UNUSED(vol);
-  return (USBD_OK);
+  return CS43L22_SetVolume(vol);
   /* USER CODE END 3 */
 }
 
@@ -219,8 +290,7 @@ static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
 static int8_t AUDIO_MuteCtl_FS(uint8_t cmd)
 {
   /* USER CODE BEGIN 4 */
-  UNUSED(cmd);
-  return (USBD_OK);
+  return CS43L22_SetMute(cmd);
   /* USER CODE END 4 */
 }
 
@@ -273,6 +343,162 @@ void HalfTransfer_CallBack_FS(void)
 }
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
+void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
+{
+  if (hi2s->Instance == SPI3)
+  {
+    HalfTransfer_CallBack_FS();
+  }
+}
+
+void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s)
+{
+  if (hi2s->Instance == SPI3)
+  {
+    TransferComplete_CallBack_FS();
+  }
+}
+
+static int8_t CS43L22_Init(uint8_t volume)
+{
+  HAL_GPIO_WritePin(Audio_RST_GPIO_Port, Audio_RST_Pin, GPIO_PIN_RESET);
+  HAL_Delay(5U);
+  HAL_GPIO_WritePin(Audio_RST_GPIO_Port, Audio_RST_Pin, GPIO_PIN_SET);
+  HAL_Delay(5U);
+
+  audio_muted = 0U;
+
+  if (CS43L22_Write(CS43L22_REG_POWER_CTL1, 0x01U) != USBD_OK)
+  {
+    return (USBD_FAIL);
+  }
+
+  if ((CS43L22_Write(CS43L22_REG_POWER_CTL2, CS43L22_OUTPUT_HEADPHONE) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_CLOCKING_CTL, 0x81U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_INTERFACE_CTL1, 0x04U) != USBD_OK) ||
+      (CS43L22_SetVolume(volume) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_ANALOG_ZC_SR_SETT, 0x00U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_MISC_CTL, 0x04U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_LIMIT_CTL1, 0x00U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_TONE_CTL, 0x0FU) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_PCMA_VOL, 0x0AU) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_PCMB_VOL, 0x0AU) != USBD_OK))
+  {
+    return (USBD_FAIL);
+  }
+
+  codec_initialized = 1U;
+  return (USBD_OK);
+}
+
+static void CS43L22_DeInit(void)
+{
+  codec_initialized = 0U;
+  HAL_GPIO_WritePin(Audio_RST_GPIO_Port, Audio_RST_Pin, GPIO_PIN_RESET);
+}
+
+static int8_t CS43L22_Play(void)
+{
+  if (codec_initialized == 0U)
+  {
+    return (USBD_FAIL);
+  }
+
+  if ((CS43L22_Write(CS43L22_REG_MISC_CTL, 0x06U) != USBD_OK) ||
+      (CS43L22_SetMute(audio_muted) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_POWER_CTL1, 0x9EU) != USBD_OK))
+  {
+    return (USBD_FAIL);
+  }
+
+  return (USBD_OK);
+}
+
+static int8_t CS43L22_Stop(void)
+{
+  if (codec_initialized == 0U)
+  {
+    return (USBD_OK);
+  }
+
+  if ((CS43L22_SetMute(1U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_MISC_CTL, 0x04U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_POWER_CTL1, 0x9FU) != USBD_OK))
+  {
+    return (USBD_FAIL);
+  }
+
+  return (USBD_OK);
+}
+
+static int8_t CS43L22_SetVolume(uint8_t volume)
+{
+  uint8_t converted_volume = CS43L22_ConvertVolume(volume);
+
+  if (converted_volume > 0xE6U)
+  {
+    converted_volume = (uint8_t)(converted_volume - 0xE7U);
+  }
+  else
+  {
+    converted_volume = (uint8_t)(converted_volume + 0x19U);
+  }
+
+  if ((CS43L22_Write(CS43L22_REG_MASTER_A_VOL, converted_volume) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_MASTER_B_VOL, converted_volume) != USBD_OK))
+  {
+    return (USBD_FAIL);
+  }
+
+  return (USBD_OK);
+}
+
+static int8_t CS43L22_SetMute(uint8_t muted)
+{
+  audio_muted = (muted != 0U) ? 1U : 0U;
+
+  if (audio_muted != 0U)
+  {
+    if ((CS43L22_Write(CS43L22_REG_POWER_CTL2, 0xFFU) != USBD_OK) ||
+        (CS43L22_Write(CS43L22_REG_HEADPHONE_A_VOL, 0x01U) != USBD_OK) ||
+        (CS43L22_Write(CS43L22_REG_HEADPHONE_B_VOL, 0x01U) != USBD_OK))
+    {
+      return (USBD_FAIL);
+    }
+  }
+  else
+  {
+    if ((CS43L22_Write(CS43L22_REG_HEADPHONE_A_VOL, 0x00U) != USBD_OK) ||
+        (CS43L22_Write(CS43L22_REG_HEADPHONE_B_VOL, 0x00U) != USBD_OK) ||
+        (CS43L22_Write(CS43L22_REG_POWER_CTL2, CS43L22_OUTPUT_HEADPHONE) != USBD_OK))
+    {
+      return (USBD_FAIL);
+    }
+  }
+
+  return (USBD_OK);
+}
+
+static int8_t CS43L22_Write(uint8_t reg, uint8_t value)
+{
+  if (HAL_I2C_Mem_Write(&hi2c1, CS43L22_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
+                        &value, 1U, CS43L22_I2C_TIMEOUT_MS) != HAL_OK)
+  {
+    return (USBD_FAIL);
+  }
+
+  return (USBD_OK);
+}
+
+static uint8_t CS43L22_ConvertVolume(uint8_t volume)
+{
+  if (volume > 100U)
+  {
+    return 255U;
+  }
+
+  return (uint8_t)(((uint32_t)volume * 255U) / 100U);
+}
 
 /* USER CODE END PRIVATE_FUNCTIONS_IMPLEMENTATION */
 

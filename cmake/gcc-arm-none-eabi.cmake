@@ -5,8 +5,9 @@ set(CMAKE_C_COMPILER_ID GNU)
 set(CMAKE_CXX_COMPILER_ID GNU)
 
 # Some default GCC settings
-# arm-none-eabi- must be part of path environment
-set(TOOLCHAIN_PREFIX                arm-none-eabi-)
+set(STM32_CLT_PATH                  "/opt/ST/STM32CubeCLT_1.21.0" CACHE PATH "STM32CubeCLT installation path")
+set(TOOLCHAIN_BIN_DIR               "${STM32_CLT_PATH}/GNU-tools-for-STM32/bin")
+set(TOOLCHAIN_PREFIX                "${TOOLCHAIN_BIN_DIR}/arm-none-eabi-")
 
 set(CMAKE_C_COMPILER                ${TOOLCHAIN_PREFIX}gcc)
 set(CMAKE_ASM_COMPILER              ${CMAKE_C_COMPILER})
