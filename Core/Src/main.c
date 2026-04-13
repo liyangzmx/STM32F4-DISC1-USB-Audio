@@ -66,7 +66,7 @@ void StartDefaultTask(void const * argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+ 
 /* USER CODE END 0 */
 
 /**

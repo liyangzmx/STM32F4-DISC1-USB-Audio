@@ -72,8 +72,12 @@
 #define CS43L22_REG_CLOCKING_CTL      0x05U
 #define CS43L22_REG_INTERFACE_CTL1    0x06U
 #define CS43L22_REG_ANALOG_ZC_SR_SETT 0x0AU
+#define CS43L22_REG_PLAYBACK_CTL1     0x0DU
 #define CS43L22_REG_MISC_CTL          0x0EU
+#define CS43L22_REG_PLAYBACK_CTL2     0x0FU
 #define CS43L22_REG_LIMIT_CTL1        0x27U
+#define CS43L22_REG_MISC_MAGIC_32     0x32U
+#define CS43L22_REG_MISC_MAGIC_47     0x47U
 #define CS43L22_REG_TONE_CTL          0x1FU
 #define CS43L22_REG_MASTER_A_VOL      0x20U
 #define CS43L22_REG_MASTER_B_VOL      0x21U
@@ -110,6 +114,7 @@
 static uint8_t audio_muted = 0U;
 static uint8_t codec_initialized = 0U;
 static uint8_t codec_playing = 0U;
+static uint8_t audio_volume = AUDIO_DEFAULT_VOLUME;
 
 /* USER CODE END PRIVATE_VARIABLES */
 
@@ -155,6 +160,7 @@ static int8_t CS43L22_Stop(void);
 static int8_t CS43L22_SetVolume(uint8_t volume);
 static int8_t CS43L22_SetMute(uint8_t muted);
 static int8_t CS43L22_Write(uint8_t reg, uint8_t value);
+static int8_t CS43L22_Read(uint8_t reg, uint8_t *value);
 static uint8_t CS43L22_ConvertVolume(uint8_t volume);
 
 /* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
@@ -192,10 +198,9 @@ static int8_t AUDIO_Init_FS(uint32_t AudioFreq, uint32_t Volume, uint32_t option
     return (USBD_FAIL);
   }
 
-  if (CS43L22_Init((uint8_t)Volume) != USBD_OK)
-  {
-    return (USBD_FAIL);
-  }
+  audio_volume = (uint8_t)Volume;
+  audio_muted = 0U;
+  codec_playing = 0U;
 
   return (USBD_OK);
   /* USER CODE END 0 */
@@ -233,6 +238,11 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
   switch(cmd)
   {
     case AUDIO_CMD_START:
+      if ((codec_initialized == 0U) && (CS43L22_Init(audio_volume) != USBD_OK))
+      {
+        return (USBD_FAIL);
+      }
+
       if (CS43L22_Play() != USBD_OK)
       {
         return (USBD_FAIL);
@@ -278,6 +288,13 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
 static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
 {
   /* USER CODE BEGIN 3 */
+  audio_volume = vol;
+
+  if (codec_initialized == 0U)
+  {
+    return (USBD_OK);
+  }
+
   return CS43L22_SetVolume(vol);
   /* USER CODE END 3 */
 }
@@ -290,6 +307,13 @@ static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
 static int8_t AUDIO_MuteCtl_FS(uint8_t cmd)
 {
   /* USER CODE BEGIN 4 */
+  audio_muted = (cmd != 0U) ? 1U : 0U;
+
+  if (codec_initialized == 0U)
+  {
+    return (USBD_OK);
+  }
+
   return CS43L22_SetMute(cmd);
   /* USER CODE END 4 */
 }
@@ -361,28 +385,38 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s)
 
 static int8_t CS43L22_Init(uint8_t volume)
 {
+  uint8_t reg_value = 0U;
+
   HAL_GPIO_WritePin(Audio_RST_GPIO_Port, Audio_RST_Pin, GPIO_PIN_RESET);
   HAL_Delay(5U);
   HAL_GPIO_WritePin(Audio_RST_GPIO_Port, Audio_RST_Pin, GPIO_PIN_SET);
   HAL_Delay(5U);
-
-  audio_muted = 0U;
 
   if (CS43L22_Write(CS43L22_REG_POWER_CTL1, 0x01U) != USBD_OK)
   {
     return (USBD_FAIL);
   }
 
-  if ((CS43L22_Write(CS43L22_REG_POWER_CTL2, CS43L22_OUTPUT_HEADPHONE) != USBD_OK) ||
+  if ((CS43L22_Write(0x00U, 0x99U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_MISC_MAGIC_47, 0x80U) != USBD_OK) ||
+      (CS43L22_Read(CS43L22_REG_MISC_MAGIC_32, &reg_value) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_MISC_MAGIC_32, (uint8_t)(reg_value | 0x80U)) != USBD_OK) ||
+      (CS43L22_Read(CS43L22_REG_MISC_MAGIC_32, &reg_value) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_MISC_MAGIC_32, (uint8_t)(reg_value & (uint8_t)~0x80U)) != USBD_OK) ||
+      (CS43L22_Write(0x00U, 0x00U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_POWER_CTL2, 0xFFU) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_CLOCKING_CTL, 0x81U) != USBD_OK) ||
-      (CS43L22_Write(CS43L22_REG_INTERFACE_CTL1, 0x04U) != USBD_OK) ||
-      (CS43L22_SetVolume(volume) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_INTERFACE_CTL1, 0x07U) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_ANALOG_ZC_SR_SETT, 0x00U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_PLAYBACK_CTL1, 0x00U) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_MISC_CTL, 0x04U) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_PLAYBACK_CTL2, 0x00U) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_LIMIT_CTL1, 0x00U) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_TONE_CTL, 0x0FU) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_PCMA_VOL, 0x0AU) != USBD_OK) ||
-      (CS43L22_Write(CS43L22_REG_PCMB_VOL, 0x0AU) != USBD_OK))
+      (CS43L22_Write(CS43L22_REG_PCMB_VOL, 0x0AU) != USBD_OK) ||
+      (CS43L22_SetVolume(volume) != USBD_OK) ||
+      (CS43L22_SetMute(audio_muted) != USBD_OK))
   {
     return (USBD_FAIL);
   }
@@ -434,6 +468,7 @@ static int8_t CS43L22_Stop(void)
 static int8_t CS43L22_SetVolume(uint8_t volume)
 {
   uint8_t converted_volume = CS43L22_ConvertVolume(volume);
+  audio_volume = volume;
 
   if (converted_volume > 0xE6U)
   {
@@ -483,6 +518,17 @@ static int8_t CS43L22_Write(uint8_t reg, uint8_t value)
 {
   if (HAL_I2C_Mem_Write(&hi2c1, CS43L22_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
                         &value, 1U, CS43L22_I2C_TIMEOUT_MS) != HAL_OK)
+  {
+    return (USBD_FAIL);
+  }
+
+  return (USBD_OK);
+}
+
+static int8_t CS43L22_Read(uint8_t reg, uint8_t *value)
+{
+  if (HAL_I2C_Mem_Read(&hi2c1, CS43L22_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
+                       value, 1U, CS43L22_I2C_TIMEOUT_MS) != HAL_OK)
   {
     return (USBD_FAIL);
   }
