@@ -47,9 +47,21 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/st7735_lcd.c
 )
 
+# Add LVGL sources
+file(GLOB_RECURSE LVGL_SOURCES
+    "Middlewares/Third_Party/LVGL/src/*.c"
+    "Middlewares/Third_Party/LVGL/lv_port_disp_st7735s.c"
+)
+
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+    ${LVGL_SOURCES}
+)
+
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Inc
+    Middlewares/Third_Party/LVGL
+    Middlewares/Third_Party/LVGL/src
 )
 
 # Add project symbols (macros)

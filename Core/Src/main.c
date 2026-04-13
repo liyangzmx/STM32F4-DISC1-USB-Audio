@@ -25,7 +25,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "lvgl.h"
+#include "lv_port_disp_st7735s.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -372,6 +373,134 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
+/**
+ * @brief Create USB Audio Information UI
+ */
+static void create_audio_info_ui(void)
+{
+  /* Get active screen */
+  lv_obj_t *scr = lv_scr_act();
+  
+  /* Set background color to black */
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
+  
+  /* TEST: Add simple colored squares to verify rendering */
+  /* Red square - top left */
+  lv_obj_t *red_box = lv_obj_create(scr);
+  lv_obj_set_size(red_box, 30, 30);
+  lv_obj_set_align(red_box, LV_ALIGN_TOP_LEFT);
+  lv_obj_set_pos(red_box, 0, 0);
+  lv_obj_set_style_bg_color(red_box, lv_color_hex(0xFF0000), LV_PART_MAIN);
+  lv_obj_set_style_border_width(red_box, 0, LV_PART_MAIN);
+  
+  /* Green square - top center */
+  lv_obj_t *green_box = lv_obj_create(scr);
+  lv_obj_set_size(green_box, 30, 30);
+  lv_obj_set_align(green_box, LV_ALIGN_TOP_MID);
+  lv_obj_set_pos(green_box, 0, 10);
+  lv_obj_set_style_bg_color(green_box, lv_color_hex(0x00FF00), LV_PART_MAIN);
+  lv_obj_set_style_border_width(green_box, 0, LV_PART_MAIN);
+  
+  /* Blue square - top right */
+  lv_obj_t *blue_box = lv_obj_create(scr);
+  lv_obj_set_size(blue_box, 30, 30);
+  lv_obj_set_align(blue_box, LV_ALIGN_TOP_RIGHT);
+  lv_obj_set_pos(blue_box, 0, 0);
+  lv_obj_set_style_bg_color(blue_box, lv_color_hex(0x0000FF), LV_PART_MAIN);
+  lv_obj_set_style_border_width(blue_box, 0, LV_PART_MAIN);
+  
+  /* Yellow square - center */
+  lv_obj_t *yellow_box = lv_obj_create(scr);
+  lv_obj_set_size(yellow_box, 40, 40);
+  lv_obj_align(yellow_box, LV_ALIGN_CENTER, 0, 20);
+  lv_obj_set_style_bg_color(yellow_box, lv_color_hex(0xFFFF00), LV_PART_MAIN);
+  lv_obj_set_style_border_width(yellow_box, 0, LV_PART_MAIN);
+  
+  /* Cyan square - bottom left */
+  lv_obj_t *cyan_box = lv_obj_create(scr);
+  lv_obj_set_size(cyan_box, 30, 30);
+  lv_obj_align(cyan_box, LV_ALIGN_BOTTOM_LEFT, 5, -5);
+  lv_obj_set_style_bg_color(cyan_box, lv_color_hex(0x00FFFF), LV_PART_MAIN);
+  lv_obj_set_style_border_width(cyan_box, 0, LV_PART_MAIN);
+  
+  /* Magenta square - bottom right */
+  lv_obj_t *magenta_box = lv_obj_create(scr);
+  lv_obj_set_size(magenta_box, 30, 30);
+  lv_obj_align(magenta_box, LV_ALIGN_BOTTOM_RIGHT, -5, -5);
+  lv_obj_set_style_bg_color(magenta_box, lv_color_hex(0xFF00FF), LV_PART_MAIN);
+  lv_obj_set_style_border_width(magenta_box, 0, LV_PART_MAIN);
+  
+  /* Simple test label in the middle */
+  lv_obj_t *test_label = lv_label_create(scr);
+  lv_label_set_text(test_label, "LVGL OK");
+  lv_obj_align(test_label, LV_ALIGN_CENTER, 0, -20);
+  lv_obj_set_style_text_color(test_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_style_text_font(test_label, &lv_font_montserrat_14, LV_PART_MAIN);
+  
+  /* Title Label: "USB Audio Info" */
+  lv_obj_t *title = lv_label_create(scr);
+  lv_label_set_text(title, "USB AUDIO");
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 45);
+  lv_obj_set_style_text_color(title, lv_color_hex(0x00FF00), LV_PART_MAIN);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_14, LV_PART_MAIN);
+  
+  /* Horizontal separator line */
+  lv_obj_t *line1 = lv_obj_create(scr);
+  lv_obj_set_size(line1, 128, 2);
+  lv_obj_align(line1, LV_ALIGN_TOP_MID, 0, 62);
+  lv_obj_set_style_bg_color(line1, lv_color_hex(0x00FF00), LV_PART_MAIN);
+  lv_obj_set_style_border_width(line1, 0, LV_PART_MAIN);
+  
+  /* USB Status Label */
+  lv_obj_t *usb_status_label = lv_label_create(scr);
+  lv_label_set_text(usb_status_label, "USB:");
+  lv_obj_align(usb_status_label, LV_ALIGN_TOP_LEFT, 5, 70);
+  lv_obj_set_style_text_color(usb_status_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+  lv_obj_set_style_text_font(usb_status_label, &lv_font_montserrat_12, LV_PART_MAIN);
+  
+  /* USB Status Value */
+  lv_obj_t *usb_status_val = lv_label_create(scr);
+  lv_label_set_text(usb_status_val, "OK");
+  lv_obj_align(usb_status_val, LV_ALIGN_TOP_RIGHT, -5, 70);
+  lv_obj_set_style_text_color(usb_status_val, lv_color_hex(0xFFFF00), LV_PART_MAIN);
+  lv_obj_set_style_text_font(usb_status_val, &lv_font_montserrat_12, LV_PART_MAIN);
+  
+  /* Device Label */
+  lv_obj_t *device_label = lv_label_create(scr);
+  lv_label_set_text(device_label, "Device:");
+  lv_obj_align(device_label, LV_ALIGN_TOP_LEFT, 5, 90);
+  lv_obj_set_style_text_color(device_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+  lv_obj_set_style_text_font(device_label, &lv_font_montserrat_12, LV_PART_MAIN);
+  
+  /* Device Value */
+  lv_obj_t *device_val = lv_label_create(scr);
+  lv_label_set_text(device_val, "HPH");
+  lv_obj_align(device_val, LV_ALIGN_TOP_RIGHT, -5, 90);
+  lv_obj_set_style_text_color(device_val, lv_color_hex(0xFFFF00), LV_PART_MAIN);
+  lv_obj_set_style_text_font(device_val, &lv_font_montserrat_12, LV_PART_MAIN);
+  
+  /* Sample Rate Label */
+  lv_obj_t *sample_rate_label = lv_label_create(scr);
+  lv_label_set_text(sample_rate_label, "48kHz");
+  lv_obj_align(sample_rate_label, LV_ALIGN_TOP_LEFT, 5, 110);
+  lv_obj_set_style_text_color(sample_rate_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+  lv_obj_set_style_text_font(sample_rate_label, &lv_font_montserrat_12, LV_PART_MAIN);
+  
+  /* Volume Label */
+  lv_obj_t *volume_label = lv_label_create(scr);
+  lv_label_set_text(volume_label, "Vol:");
+  lv_obj_align(volume_label, LV_ALIGN_TOP_LEFT, 5, 130);
+  lv_obj_set_style_text_color(volume_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+  lv_obj_set_style_text_font(volume_label, &lv_font_montserrat_12, LV_PART_MAIN);
+  
+  /* Volume Value */
+  lv_obj_t *volume_val = lv_label_create(scr);
+  lv_label_set_text(volume_val, "100%");
+  lv_obj_align(volume_val, LV_ALIGN_TOP_RIGHT, -5, 130);
+  lv_obj_set_style_text_color(volume_val, lv_color_hex(0xFFFF00), LV_PART_MAIN);
+  lv_obj_set_style_text_font(volume_val, &lv_font_montserrat_12, LV_PART_MAIN);
+}
+
 /* USER CODE BEGIN Header_StartDefaultTask */
 /**
   * @brief  Function implementing the defaultTask thread.
@@ -408,45 +537,26 @@ void StartAudioTask(void const * argument)
 
 void StartLcdTask(void const * argument)
 {
-  static const uint16_t colors[] =
-  {
-    LCD_COLOR_RED,
-    LCD_COLOR_GREEN,
-    LCD_COLOR_BLUE,
-    LCD_COLOR_WHITE,
-    LCD_COLOR_BLACK,
-    LCD_COLOR_YELLOW,
-    LCD_COLOR_CYAN
-  };
-  uint32_t index = 0U;
-  GPIO_PinState button_state = GPIO_PIN_SET;
-  GPIO_PinState last_button_state = GPIO_PIN_SET;
-
   /* USER CODE BEGIN StartLcdTask */
   UNUSED(argument);
 
-  ST7735_Init();
-  ST7735_FillScreen(colors[index]);
+  /* Initialize LVGL and the display */
+  lv_init();
+  lv_port_disp_init();
 
+  /* Create USB Audio Information UI */
+  create_audio_info_ui();
+
+  /* Main loop: handle LVGL tasks with sufficient delay to avoid blocking audio */
   for(;;)
   {
-    /* 读取按键状态 (PA0, B1 - 按下时为低电平) */
-    button_state = HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
-    
-    /* 检测按键从高到低的边沿（按下） */
-    if (button_state == GPIO_PIN_RESET && last_button_state == GPIO_PIN_SET)
-    {
-      /* 按键被按下，切换颜色 */
-      index = (index + 1U) % (sizeof(colors) / sizeof(colors[0]));
-      ST7735_FillScreen(colors[index]);
-      osDelay(50);  /* 消抖延迟 */
-    }
-    
-    last_button_state = button_state;
-    osDelay(20);  /* 扫描周期 */
+    /* Handle LVGL tasks every 30ms (don't update too frequently) */
+    lv_timer_handler();
+    osDelay(30);
   }
   /* USER CODE END StartLcdTask */
 }
+
 
 /**
   * @brief  Period elapsed callback in non blocking mode

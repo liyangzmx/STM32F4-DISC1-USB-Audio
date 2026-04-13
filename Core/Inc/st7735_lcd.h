@@ -18,6 +18,7 @@ extern "C" {
 
 void ST7735_Init(void);
 void ST7735_FillScreen(uint16_t color);
+void ST7735_FillRect(uint16_t x_start, uint16_t y_start, uint16_t x_end, uint16_t y_end, const uint16_t *colors);
 
 #ifdef __cplusplus
 }

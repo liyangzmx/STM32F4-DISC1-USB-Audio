@@ -248,3 +248,52 @@ void ST7735_FillScreen(uint16_t color)
   lcd_bus_delay();
   lcd_pin_high(LCD_CS_GPIO_Port, LCD_CS_Pin);  // Release CS
 }
+
+/**
+ * @brief 填充矩形区域（用于LVGL）
+ * @param x_start 起始列坐标
+ * @param y_start 起始行坐标
+ * @param x_end   结束列坐标
+ * @param y_end   结束行坐标
+ * @param colors  颜色数据指针 (RGB565)
+ */
+void ST7735_FillRect(uint16_t x_start, uint16_t y_start, uint16_t x_end, uint16_t y_end, const uint16_t *colors)
+{
+  uint32_t pixel_count = (uint32_t)(x_end - x_start + 1) * (y_end - y_start + 1);
+
+  // 设置列地址
+  lcd_write_command(0x2A);  // Column Address Set
+  lcd_write_data(0x00);
+  lcd_write_data((uint8_t)(x_start + ST7735_X_OFFSET));
+  lcd_write_data(0x00);
+  lcd_write_data((uint8_t)(x_end + ST7735_X_OFFSET));
+
+  // 设置行地址
+  lcd_write_command(0x2B);  // Row Address Set
+  lcd_write_data(0x00);
+  lcd_write_data((uint8_t)(y_start + ST7735_Y_OFFSET));
+  lcd_write_data(0x00);
+  lcd_write_data((uint8_t)(y_end + ST7735_Y_OFFSET));
+
+  // 发送GRAM写入命令，保持CS低
+  lcd_pin_low(LCD_CS_GPIO_Port, LCD_CS_Pin);
+  lcd_pin_low(LCD_DC_GPIO_Port, LCD_DC_Pin);
+  lcd_bus_delay();
+  
+  lcd_write_u8(0x2C);  // Memory Write command
+  
+  lcd_bus_delay();
+  lcd_pin_high(LCD_DC_GPIO_Port, LCD_DC_Pin);  // Switch to data mode
+  lcd_bus_delay();
+
+  // 填充所有像素
+  for (uint32_t i = 0; i < pixel_count; i++)
+  {
+    uint16_t color = colors[i];
+    lcd_write_u8((uint8_t)(color >> 8));
+    lcd_write_u8((uint8_t)color);
+  }
+
+  lcd_bus_delay();
+  lcd_pin_high(LCD_CS_GPIO_Port, LCD_CS_Pin);  // Release CS
+}
