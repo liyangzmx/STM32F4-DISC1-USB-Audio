@@ -67,7 +67,8 @@
 #define CS43L22_I2C_ADDR              (0x4AU << 1)
 #define CS43L22_OUTPUT_HEADPHONE      0xAFU
 #define CS43L22_I2C_TIMEOUT_MS        100U
-#define AUDIO_CODEC_FIXED_VOLUME      100U
+#define AUDIO_USB_PACKET_TIMEOUT_MS   20U
+#define AUDIO_CODEC_FIXED_VOLUME      82U
 #define AUDIO_CODEC_PCM_VOLUME        0x00U
 
 #define CS43L22_REG_POWER_CTL1        0x02U
@@ -119,6 +120,11 @@ static uint8_t codec_initialized = 0U;
 static uint8_t codec_playing = 0U;
 static uint8_t audio_volume = AUDIO_CODEC_FIXED_VOLUME;
 static uint8_t playback_start_pending = 0U;
+static volatile uint8_t codec_init_requested = 0U;
+static volatile uint8_t playback_dma_start_requested = 0U;
+static volatile uint8_t playback_stop_requested = 0U;
+static volatile uint8_t codec_deinit_requested = 0U;
+static volatile uint32_t last_usb_packet_tick = 0U;
 
 /* USER CODE END PRIVATE_VARIABLES */
 
@@ -168,6 +174,7 @@ static int8_t CS43L22_Read(uint8_t reg, uint8_t *value);
 static uint8_t CS43L22_ConvertVolume(uint8_t volume);
 static void AUDIO_ClearUsbRingBuffer(void);
 static int8_t AUDIO_StartPlaybackDma(void);
+static void AUDIO_StopPlaybackPath(void);
 
 /* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
 
@@ -209,6 +216,11 @@ static int8_t AUDIO_Init_FS(uint32_t AudioFreq, uint32_t Volume, uint32_t option
   audio_muted = 0U;
   codec_playing = 0U;
   playback_start_pending = 0U;
+  codec_init_requested = 0U;
+  playback_dma_start_requested = 0U;
+  playback_stop_requested = 0U;
+  codec_deinit_requested = 0U;
+  last_usb_packet_tick = HAL_GetTick();
   AUDIO_ClearUsbRingBuffer();
 
   return (USBD_OK);
@@ -224,11 +236,8 @@ static int8_t AUDIO_DeInit_FS(uint32_t options)
 {
   /* USER CODE BEGIN 1 */
   UNUSED(options);
-  (void)HAL_I2S_DMAStop(&hi2s3);
-  codec_playing = 0U;
-  playback_start_pending = 0U;
-  (void)CS43L22_Stop();
-  CS43L22_DeInit();
+  playback_stop_requested = 1U;
+  codec_deinit_requested = 1U;
   return (USBD_OK);
   /* USER CODE END 1 */
 }
@@ -248,14 +257,13 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
   switch(cmd)
   {
     case AUDIO_CMD_START:
-      if ((codec_initialized == 0U) && (CS43L22_Init(audio_volume) != USBD_OK))
-      {
-        return (USBD_FAIL);
-      }
-
       UNUSED(pbuf);
       UNUSED(size);
-      playback_start_pending = 1U;
+      playback_stop_requested = 0U;
+      codec_deinit_requested = 0U;
+      playback_dma_start_requested = 0U;
+      last_usb_packet_tick = HAL_GetTick();
+      codec_init_requested = 1U;
     break;
 
     case AUDIO_CMD_PLAY:
@@ -268,10 +276,9 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
     break;
 
     case AUDIO_CMD_STOP:
-      status = HAL_I2S_DMAStop(&hi2s3);
-      codec_playing = 0U;
-      playback_start_pending = 0U;
-      (void)CS43L22_Stop();
+      playback_dma_start_requested = 0U;
+      playback_stop_requested = 1U;
+      status = HAL_OK;
     break;
 
     default:
@@ -291,9 +298,14 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
 static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
 {
   /* USER CODE BEGIN 3 */
-  UNUSED(vol);
-  audio_volume = AUDIO_CODEC_FIXED_VOLUME;
-  return (USBD_OK);
+  audio_volume = vol;
+
+  if (codec_initialized == 0U)
+  {
+    return (USBD_OK);
+  }
+
+  return CS43L22_SetVolume(vol);
   /* USER CODE END 3 */
 }
 
@@ -329,6 +341,11 @@ static int8_t AUDIO_PeriodicTC_FS(uint8_t *pbuf, uint32_t size, uint8_t cmd)
 
   UNUSED(pbuf);
 
+  if (cmd == AUDIO_OUT_TC)
+  {
+    last_usb_packet_tick = HAL_GetTick();
+  }
+
   if ((cmd != AUDIO_OUT_TC) || (playback_start_pending == 0U) || (codec_playing != 0U))
   {
     return (USBD_OK);
@@ -352,7 +369,8 @@ static int8_t AUDIO_PeriodicTC_FS(uint8_t *pbuf, uint32_t size, uint8_t cmd)
     return (USBD_OK);
   }
 
-  return AUDIO_StartPlaybackDma();
+  playback_dma_start_requested = 1U;
+  return (USBD_OK);
 
   return (USBD_OK);
   /* USER CODE END 5 */
@@ -376,6 +394,11 @@ static int8_t AUDIO_GetState_FS(void)
 void TransferComplete_CallBack_FS(void)
 {
   /* USER CODE BEGIN 7 */
+  if (codec_playing == 0U)
+  {
+    return;
+  }
+
   USBD_AUDIO_Sync(&hUsbDeviceFS, AUDIO_OFFSET_FULL);
   /* USER CODE END 7 */
 }
@@ -387,29 +410,60 @@ void TransferComplete_CallBack_FS(void)
 void HalfTransfer_CallBack_FS(void)
 {
   /* USER CODE BEGIN 8 */
+  if (codec_playing == 0U)
+  {
+    return;
+  }
+
   USBD_AUDIO_Sync(&hUsbDeviceFS, AUDIO_OFFSET_HALF);
   /* USER CODE END 8 */
 }
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
-int8_t AUDIO_PreInitCodec_FS(uint8_t volume)
+void AUDIO_ServiceTaskStep(void)
 {
-  UNUSED(volume);
-  audio_volume = AUDIO_CODEC_FIXED_VOLUME;
-  audio_muted = 0U;
-
-  if (codec_initialized == 0U)
+  if (((codec_playing != 0U) || (playback_start_pending != 0U) ||
+       (codec_init_requested != 0U) || (playback_dma_start_requested != 0U)) &&
+      ((HAL_GetTick() - last_usb_packet_tick) > AUDIO_USB_PACKET_TIMEOUT_MS))
   {
-    return CS43L22_Init(audio_volume);
+    playback_stop_requested = 1U;
+    codec_deinit_requested = 1U;
   }
 
-  if ((CS43L22_SetVolume(audio_volume) != USBD_OK) ||
-      (CS43L22_SetMute(audio_muted) != USBD_OK))
+  if (playback_stop_requested != 0U)
   {
-    return USBD_FAIL;
+    AUDIO_StopPlaybackPath();
+
+    if (codec_deinit_requested != 0U)
+    {
+      CS43L22_DeInit();
+    }
+
+    codec_init_requested = 0U;
+    playback_dma_start_requested = 0U;
+    playback_stop_requested = 0U;
+    codec_deinit_requested = 0U;
+    return;
   }
 
-  return USBD_OK;
+  if (codec_init_requested != 0U)
+  {
+    if ((codec_initialized != 0U) || (CS43L22_Init(audio_volume) == USBD_OK))
+    {
+      codec_init_requested = 0U;
+      playback_start_pending = 1U;
+    }
+
+    return;
+  }
+
+  if ((playback_dma_start_requested != 0U) && (codec_playing == 0U))
+  {
+    if (AUDIO_StartPlaybackDma() == USBD_OK)
+    {
+      playback_dma_start_requested = 0U;
+    }
+  }
 }
 
 static void AUDIO_ClearUsbRingBuffer(void)
@@ -454,6 +508,31 @@ static int8_t AUDIO_StartPlaybackDma(void)
   }
 
   return USBD_FAIL;
+}
+
+static void AUDIO_StopPlaybackPath(void)
+{
+  codec_playing = 0U;
+  playback_start_pending = 0U;
+  playback_dma_start_requested = 0U;
+
+  /*
+   * When USB disappears, SPI/I2S DMA may still loop the last audio fragment
+   * for a short moment before the stop sequence fully takes effect. Clear the
+   * shared ring buffer first so any tail immediately becomes silence.
+   */
+  AUDIO_ClearUsbRingBuffer();
+
+  if (codec_initialized != 0U)
+  {
+    (void)CS43L22_Write(CS43L22_REG_POWER_CTL2, 0xFFU);
+    (void)CS43L22_Write(CS43L22_REG_HEADPHONE_A_VOL, 0x01U);
+    (void)CS43L22_Write(CS43L22_REG_HEADPHONE_B_VOL, 0x01U);
+    HAL_Delay(2U);
+  }
+
+  (void)HAL_I2S_DMAStop(&hi2s3);
+  (void)CS43L22_Stop();
 }
 
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s)

@@ -90,6 +90,7 @@ extern "C" {
 #define AUDIO_STREAMING_INTERFACE_DESC_SIZE           0x07U
 
 #define AUDIO_CONTROL_MUTE                            0x0001U
+#define AUDIO_CONTROL_VOLUME                          0x0002U
 
 #define AUDIO_FORMAT_TYPE_I                           0x01U
 #define AUDIO_FORMAT_TYPE_III                         0x03U
@@ -97,6 +98,9 @@ extern "C" {
 #define AUDIO_ENDPOINT_GENERAL                        0x01U
 
 #define AUDIO_REQ_GET_CUR                             0x81U
+#define AUDIO_REQ_GET_MIN                             0x82U
+#define AUDIO_REQ_GET_MAX                             0x83U
+#define AUDIO_REQ_GET_RES                             0x84U
 #define AUDIO_REQ_SET_CUR                             0x01U
 
 #define AUDIO_OUT_STREAMING_CTRL                      0x02U
@@ -141,6 +145,7 @@ typedef enum
 typedef struct
 {
   uint8_t cmd;
+  uint8_t cs;
   uint8_t data[USB_MAX_EP0_SIZE];
   uint8_t len;
   uint8_t unit;

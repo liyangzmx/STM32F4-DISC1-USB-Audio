@@ -115,7 +115,7 @@ void TransferComplete_CallBack_FS(void);
 void HalfTransfer_CallBack_FS(void);
 
 /* USER CODE BEGIN EXPORTED_FUNCTIONS */
-int8_t AUDIO_PreInitCodec_FS(uint8_t volume);
+void AUDIO_ServiceTaskStep(void);
 
 /* USER CODE END EXPORTED_FUNCTIONS */
 

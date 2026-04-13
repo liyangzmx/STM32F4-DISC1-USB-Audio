@@ -49,6 +49,7 @@ I2S_HandleTypeDef hi2s3;
 DMA_HandleTypeDef hdma_spi3_tx;
 
 osThreadId defaultTaskHandle;
+osThreadId audioTaskHandle;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -60,6 +61,7 @@ static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2S3_Init(void);
 void StartDefaultTask(void const * argument);
+void StartAudioTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -125,6 +127,10 @@ int main(void)
   /* definition and creation of defaultTask */
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+
+  /* definition and creation of audioTask */
+  osThreadDef(audioTask, StartAudioTask, osPriorityAboveNormal, 0, 128);
+  audioTaskHandle = osThreadCreate(osThread(audioTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -369,11 +375,6 @@ static void MX_GPIO_Init(void)
 void StartDefaultTask(void const * argument)
 {
 /* USER CODE BEGIN 5 */
-  if (AUDIO_PreInitCodec_FS(AUDIO_DEFAULT_VOLUME) != USBD_OK)
-  {
-    HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
-  }
-
   /* init code for USB_DEVICE */
   MX_USB_DEVICE_Init();
 
@@ -383,6 +384,19 @@ void StartDefaultTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END 5 */
+}
+
+void StartAudioTask(void const * argument)
+{
+  /* USER CODE BEGIN StartAudioTask */
+  UNUSED(argument);
+
+  for(;;)
+  {
+    AUDIO_ServiceTaskStep();
+    osDelay(1);
+  }
+  /* USER CODE END StartAudioTask */
 }
 
 /**
