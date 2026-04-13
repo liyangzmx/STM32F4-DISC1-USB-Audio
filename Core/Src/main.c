@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "st7735_lcd.h"
 #include "usb_device.h"
 #include "usbd_audio_if.h"
 
@@ -50,6 +51,7 @@ DMA_HandleTypeDef hdma_spi3_tx;
 
 osThreadId defaultTaskHandle;
 osThreadId audioTaskHandle;
+osThreadId lcdTaskHandle;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -62,6 +64,7 @@ static void MX_I2C1_Init(void);
 static void MX_I2S3_Init(void);
 void StartDefaultTask(void const * argument);
 void StartAudioTask(void const * argument);
+void StartLcdTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -131,6 +134,10 @@ int main(void)
   /* definition and creation of audioTask */
   osThreadDef(audioTask, StartAudioTask, osPriorityAboveNormal, 0, 128);
   audioTaskHandle = osThreadCreate(osThread(audioTask), NULL);
+
+  /* definition and creation of lcdTask */
+  osThreadDef(lcdTask, StartLcdTask, osPriorityLow, 0, 256);
+  lcdTaskHandle = osThreadCreate(osThread(lcdTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -397,6 +404,48 @@ void StartAudioTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END StartAudioTask */
+}
+
+void StartLcdTask(void const * argument)
+{
+  static const uint16_t colors[] =
+  {
+    LCD_COLOR_RED,
+    LCD_COLOR_GREEN,
+    LCD_COLOR_BLUE,
+    LCD_COLOR_WHITE,
+    LCD_COLOR_BLACK,
+    LCD_COLOR_YELLOW,
+    LCD_COLOR_CYAN
+  };
+  uint32_t index = 0U;
+  GPIO_PinState button_state = GPIO_PIN_SET;
+  GPIO_PinState last_button_state = GPIO_PIN_SET;
+
+  /* USER CODE BEGIN StartLcdTask */
+  UNUSED(argument);
+
+  ST7735_Init();
+  ST7735_FillScreen(colors[index]);
+
+  for(;;)
+  {
+    /* 读取按键状态 (PA0, B1 - 按下时为低电平) */
+    button_state = HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
+    
+    /* 检测按键从高到低的边沿（按下） */
+    if (button_state == GPIO_PIN_RESET && last_button_state == GPIO_PIN_SET)
+    {
+      /* 按键被按下，切换颜色 */
+      index = (index + 1U) % (sizeof(colors) / sizeof(colors[0]));
+      ST7735_FillScreen(colors[index]);
+      osDelay(50);  /* 消抖延迟 */
+    }
+    
+    last_button_state = button_state;
+    osDelay(20);  /* 扫描周期 */
+  }
+  /* USER CODE END StartLcdTask */
 }
 
 /**
