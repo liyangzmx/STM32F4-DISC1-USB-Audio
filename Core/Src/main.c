@@ -20,9 +20,11 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "usb_device.h"
+#include "usbd_audio_if.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stddef.h>
 
 /* USER CODE END Includes */
 
@@ -48,7 +50,9 @@ I2S_HandleTypeDef hi2s3;
 DMA_HandleTypeDef hdma_spi3_tx;
 
 osThreadId defaultTaskHandle;
+osThreadId audioTestTaskHandle;
 /* USER CODE BEGIN PV */
+static uint16_t sineDmaBuffer[48U * 2U * 16U];
 
 /* USER CODE END PV */
 
@@ -59,6 +63,7 @@ static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2S3_Init(void);
 void StartDefaultTask(void const * argument);
+void StartAudioTestTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -66,7 +71,26 @@ void StartDefaultTask(void const * argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
- 
+static void FillSineBuffer(void)
+{
+  static const int16_t sineTable[48] =
+  {
+       0,  3916,  7765, 11480, 14999, 18262, 21213, 23800,
+   25980, 27716, 28977, 29743, 30000, 29743, 28977, 27716,
+   25980, 23800, 21213, 18262, 14999, 11480,  7765,  3916,
+       0, -3916, -7765,-11480,-14999,-18262,-21213,-23800,
+  -25980,-27716,-28977,-29743,-30000,-29743,-28977,-27716,
+  -25980,-23800,-21213,-18262,-14999,-11480, -7765, -3916
+  };
+  size_t i;
+
+  for (i = 0; i < (sizeof(sineDmaBuffer) / sizeof(sineDmaBuffer[0])); i += 2U)
+  {
+    int16_t sample = sineTable[(i / 2U) % 48U];
+    sineDmaBuffer[i] = (uint16_t)sample;
+    sineDmaBuffer[i + 1U] = (uint16_t)sample;
+  }
+}
 /* USER CODE END 0 */
 
 /**
@@ -125,6 +149,10 @@ int main(void)
   /* definition and creation of defaultTask */
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+
+  /* definition and creation of audioTestTask */
+  // osThreadDef(audioTestTask, StartAudioTestTask, osPriorityBelowNormal, 0, 256);
+  // audioTestTaskHandle = osThreadCreate(osThread(audioTestTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -377,6 +405,31 @@ void StartDefaultTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END 5 */
+}
+
+void StartAudioTestTask(void const * argument)
+{
+  UNUSED(argument);
+
+  FillSineBuffer();
+  osDelay(1000U);
+
+  if (AUDIO_StartLocalPlayback_FS(sineDmaBuffer,
+                                  (uint32_t)(sizeof(sineDmaBuffer) / sizeof(sineDmaBuffer[0])),
+                                  70U) != USBD_OK)
+  {
+    HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
+  }
+  else
+  {
+    HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
+  }
+
+  for (;;)
+  {
+    osDelay(1000U);
+    HAL_GPIO_TogglePin(LD6_GPIO_Port, LD6_Pin);
+  }
 }
 
 /**

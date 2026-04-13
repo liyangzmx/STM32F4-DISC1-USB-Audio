@@ -115,6 +115,7 @@ static uint8_t audio_muted = 0U;
 static uint8_t codec_initialized = 0U;
 static uint8_t codec_playing = 0U;
 static uint8_t audio_volume = AUDIO_DEFAULT_VOLUME;
+static uint8_t local_playback_active = 0U;
 
 /* USER CODE END PRIVATE_VARIABLES */
 
@@ -201,6 +202,7 @@ static int8_t AUDIO_Init_FS(uint32_t AudioFreq, uint32_t Volume, uint32_t option
   audio_volume = (uint8_t)Volume;
   audio_muted = 0U;
   codec_playing = 0U;
+  local_playback_active = 0U;
 
   return (USBD_OK);
   /* USER CODE END 0 */
@@ -217,6 +219,7 @@ static int8_t AUDIO_DeInit_FS(uint32_t options)
   UNUSED(options);
   (void)HAL_I2S_DMAStop(&hi2s3);
   codec_playing = 0U;
+  local_playback_active = 0U;
   (void)CS43L22_Stop();
   CS43L22_DeInit();
   return (USBD_OK);
@@ -238,6 +241,13 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
   switch(cmd)
   {
     case AUDIO_CMD_START:
+      if (local_playback_active != 0U)
+      {
+        (void)HAL_I2S_DMAStop(&hi2s3);
+        local_playback_active = 0U;
+        codec_playing = 0U;
+      }
+
       if ((codec_initialized == 0U) && (CS43L22_Init(audio_volume) != USBD_OK))
       {
         return (USBD_FAIL);
@@ -253,6 +263,7 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
         status = HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t *)pbuf,
                                       AUDIO_TOTAL_BUF_SIZE / sizeof(uint16_t));
         codec_playing = (status == HAL_OK) ? 1U : 0U;
+        local_playback_active = 0U;
       }
     break;
 
@@ -268,6 +279,7 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
     case AUDIO_CMD_STOP:
       status = HAL_I2S_DMAStop(&hi2s3);
       codec_playing = 0U;
+      local_playback_active = 0U;
       (void)CS43L22_Stop();
     break;
 
@@ -351,7 +363,10 @@ static int8_t AUDIO_GetState_FS(void)
 void TransferComplete_CallBack_FS(void)
 {
   /* USER CODE BEGIN 7 */
-  USBD_AUDIO_Sync(&hUsbDeviceFS, AUDIO_OFFSET_FULL);
+  if (local_playback_active == 0U)
+  {
+    USBD_AUDIO_Sync(&hUsbDeviceFS, AUDIO_OFFSET_FULL);
+  }
   /* USER CODE END 7 */
 }
 
@@ -362,11 +377,66 @@ void TransferComplete_CallBack_FS(void)
 void HalfTransfer_CallBack_FS(void)
 {
   /* USER CODE BEGIN 8 */
-  USBD_AUDIO_Sync(&hUsbDeviceFS, AUDIO_OFFSET_HALF);
+  if (local_playback_active == 0U)
+  {
+    USBD_AUDIO_Sync(&hUsbDeviceFS, AUDIO_OFFSET_HALF);
+  }
   /* USER CODE END 8 */
 }
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
+int8_t AUDIO_StartLocalPlayback_FS(uint16_t *buffer, uint32_t sample_count, uint8_t volume)
+{
+  HAL_StatusTypeDef status;
+
+  if ((buffer == NULL) || (sample_count == 0U))
+  {
+    return (USBD_FAIL);
+  }
+
+  audio_volume = volume;
+  audio_muted = 0U;
+
+  if ((codec_initialized == 0U) && (CS43L22_Init(audio_volume) != USBD_OK))
+  {
+    return (USBD_FAIL);
+  }
+
+  if (CS43L22_Play() != USBD_OK)
+  {
+    return (USBD_FAIL);
+  }
+
+  status = HAL_I2S_DMAStop(&hi2s3);
+  if ((status != HAL_OK) && (status != HAL_BUSY))
+  {
+    return (USBD_FAIL);
+  }
+
+  status = HAL_I2S_Transmit_DMA(&hi2s3, buffer, sample_count);
+  if (status != HAL_OK)
+  {
+    return (USBD_FAIL);
+  }
+
+  codec_playing = 1U;
+  local_playback_active = 1U;
+
+  return (USBD_OK);
+}
+
+int8_t AUDIO_StopLocalPlayback_FS(void)
+{
+  if (HAL_I2S_DMAStop(&hi2s3) != HAL_OK)
+  {
+    return (USBD_FAIL);
+  }
+
+  codec_playing = 0U;
+  local_playback_active = 0U;
+  return CS43L22_Stop();
+}
+
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
 {
   if (hi2s->Instance == SPI3)

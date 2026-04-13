@@ -16,7 +16,7 @@
       "serverpath": "/opt/ST/STM32CubeCLT_1.21.0/STLink-gdb-server/bin/ST-LINK_gdbserver",
       "stm32cubeprogrammer": "/opt/ST/STM32CubeCLT_1.21.0/STM32CubeProgrammer/bin",
       "svdFile": "/opt/ST/STM32CubeCLT_1.21.0/STMicroelectronics_CMSIS_SVD/STM32F407.svd",
-      "showDevDebugOutput": "none"
+      "showDevDebugOutput": "raw"
     },
     {
       "name": "Attach STM32F407-DISC-Audio (ST-LINK)",
@@ -31,7 +31,7 @@
       "serverpath": "/opt/ST/STM32CubeCLT_1.21.0/STLink-gdb-server/bin/ST-LINK_gdbserver",
       "stm32cubeprogrammer": "/opt/ST/STM32CubeCLT_1.21.0/STM32CubeProgrammer/bin",
       "svdFile": "/opt/ST/STM32CubeCLT_1.21.0/STMicroelectronics_CMSIS_SVD/STM32F407.svd",
-      "showDevDebugOutput": "none"
+      "showDevDebugOutput": "raw"
     }
   ]
 }
