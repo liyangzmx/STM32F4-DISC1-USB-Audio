@@ -115,8 +115,7 @@ void TransferComplete_CallBack_FS(void);
 void HalfTransfer_CallBack_FS(void);
 
 /* USER CODE BEGIN EXPORTED_FUNCTIONS */
-int8_t AUDIO_StartLocalPlayback_FS(uint16_t *buffer, uint32_t sample_count, uint8_t volume);
-int8_t AUDIO_StopLocalPlayback_FS(void);
+int8_t AUDIO_PreInitCodec_FS(uint8_t volume);
 
 /* USER CODE END EXPORTED_FUNCTIONS */
 
