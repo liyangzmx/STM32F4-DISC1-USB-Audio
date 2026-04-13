@@ -23,6 +23,7 @@
 
 /* USER CODE BEGIN INCLUDE */
 #include "main.h"
+#include <string.h>
 
 /* USER CODE END INCLUDE */
 
@@ -66,6 +67,8 @@
 #define CS43L22_I2C_ADDR              (0x4AU << 1)
 #define CS43L22_OUTPUT_HEADPHONE      0xAFU
 #define CS43L22_I2C_TIMEOUT_MS        100U
+#define AUDIO_CODEC_FIXED_VOLUME      100U
+#define AUDIO_CODEC_PCM_VOLUME        0x00U
 
 #define CS43L22_REG_POWER_CTL1        0x02U
 #define CS43L22_REG_POWER_CTL2        0x04U
@@ -114,7 +117,8 @@
 static uint8_t audio_muted = 0U;
 static uint8_t codec_initialized = 0U;
 static uint8_t codec_playing = 0U;
-static uint8_t audio_volume = AUDIO_DEFAULT_VOLUME;
+static uint8_t audio_volume = AUDIO_CODEC_FIXED_VOLUME;
+static uint8_t playback_start_pending = 0U;
 
 /* USER CODE END PRIVATE_VARIABLES */
 
@@ -162,6 +166,8 @@ static int8_t CS43L22_SetMute(uint8_t muted);
 static int8_t CS43L22_Write(uint8_t reg, uint8_t value);
 static int8_t CS43L22_Read(uint8_t reg, uint8_t *value);
 static uint8_t CS43L22_ConvertVolume(uint8_t volume);
+static void AUDIO_ClearUsbRingBuffer(void);
+static int8_t AUDIO_StartPlaybackDma(void);
 
 /* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
 
@@ -199,8 +205,11 @@ static int8_t AUDIO_Init_FS(uint32_t AudioFreq, uint32_t Volume, uint32_t option
   }
 
   audio_volume = (uint8_t)Volume;
+  audio_volume = AUDIO_CODEC_FIXED_VOLUME;
   audio_muted = 0U;
   codec_playing = 0U;
+  playback_start_pending = 0U;
+  AUDIO_ClearUsbRingBuffer();
 
   return (USBD_OK);
   /* USER CODE END 0 */
@@ -217,6 +226,7 @@ static int8_t AUDIO_DeInit_FS(uint32_t options)
   UNUSED(options);
   (void)HAL_I2S_DMAStop(&hi2s3);
   codec_playing = 0U;
+  playback_start_pending = 0U;
   (void)CS43L22_Stop();
   CS43L22_DeInit();
   return (USBD_OK);
@@ -243,17 +253,9 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
         return (USBD_FAIL);
       }
 
-      if (CS43L22_Play() != USBD_OK)
-      {
-        return (USBD_FAIL);
-      }
-
-      if (codec_playing == 0U)
-      {
-        status = HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t *)pbuf,
-                                      AUDIO_TOTAL_BUF_SIZE / sizeof(uint16_t));
-        codec_playing = (status == HAL_OK) ? 1U : 0U;
-      }
+      UNUSED(pbuf);
+      UNUSED(size);
+      playback_start_pending = 1U;
     break;
 
     case AUDIO_CMD_PLAY:
@@ -268,6 +270,7 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
     case AUDIO_CMD_STOP:
       status = HAL_I2S_DMAStop(&hi2s3);
       codec_playing = 0U;
+      playback_start_pending = 0U;
       (void)CS43L22_Stop();
     break;
 
@@ -288,14 +291,9 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
 static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
 {
   /* USER CODE BEGIN 3 */
-  audio_volume = vol;
-
-  if (codec_initialized == 0U)
-  {
-    return (USBD_OK);
-  }
-
-  return CS43L22_SetVolume(vol);
+  UNUSED(vol);
+  audio_volume = AUDIO_CODEC_FIXED_VOLUME;
+  return (USBD_OK);
   /* USER CODE END 3 */
 }
 
@@ -326,9 +324,36 @@ static int8_t AUDIO_MuteCtl_FS(uint8_t cmd)
 static int8_t AUDIO_PeriodicTC_FS(uint8_t *pbuf, uint32_t size, uint8_t cmd)
 {
   /* USER CODE BEGIN 5 */
+  USBD_AUDIO_HandleTypeDef *haudio;
+  uint32_t next_wr_ptr;
+
   UNUSED(pbuf);
-  UNUSED(size);
-  UNUSED(cmd);
+
+  if ((cmd != AUDIO_OUT_TC) || (playback_start_pending == 0U) || (codec_playing != 0U))
+  {
+    return (USBD_OK);
+  }
+
+  haudio = (USBD_AUDIO_HandleTypeDef *)hUsbDeviceFS.pClassDataCmsit[hUsbDeviceFS.classId];
+
+  if (haudio == NULL)
+  {
+    return (USBD_FAIL);
+  }
+
+  next_wr_ptr = (uint32_t)haudio->wr_ptr + size;
+  if (next_wr_ptr >= AUDIO_TOTAL_BUF_SIZE)
+  {
+    next_wr_ptr -= AUDIO_TOTAL_BUF_SIZE;
+  }
+
+  if (next_wr_ptr < (AUDIO_TOTAL_BUF_SIZE / 2U))
+  {
+    return (USBD_OK);
+  }
+
+  return AUDIO_StartPlaybackDma();
+
   return (USBD_OK);
   /* USER CODE END 5 */
 }
@@ -369,7 +394,8 @@ void HalfTransfer_CallBack_FS(void)
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
 int8_t AUDIO_PreInitCodec_FS(uint8_t volume)
 {
-  audio_volume = volume;
+  UNUSED(volume);
+  audio_volume = AUDIO_CODEC_FIXED_VOLUME;
   audio_muted = 0U;
 
   if (codec_initialized == 0U)
@@ -384,6 +410,50 @@ int8_t AUDIO_PreInitCodec_FS(uint8_t volume)
   }
 
   return USBD_OK;
+}
+
+static void AUDIO_ClearUsbRingBuffer(void)
+{
+  USBD_AUDIO_HandleTypeDef *haudio;
+
+  haudio = (USBD_AUDIO_HandleTypeDef *)hUsbDeviceFS.pClassDataCmsit[hUsbDeviceFS.classId];
+
+  if (haudio == NULL)
+  {
+    return;
+  }
+
+  memset(haudio->buffer, 0, sizeof(haudio->buffer));
+}
+
+static int8_t AUDIO_StartPlaybackDma(void)
+{
+  HAL_StatusTypeDef status;
+  USBD_AUDIO_HandleTypeDef *haudio;
+
+  haudio = (USBD_AUDIO_HandleTypeDef *)hUsbDeviceFS.pClassDataCmsit[hUsbDeviceFS.classId];
+
+  if (haudio == NULL)
+  {
+    return USBD_FAIL;
+  }
+
+  if (CS43L22_Play() != USBD_OK)
+  {
+    return USBD_FAIL;
+  }
+
+  status = HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t *)haudio->buffer,
+                                AUDIO_TOTAL_BUF_SIZE / sizeof(uint16_t));
+  codec_playing = (status == HAL_OK) ? 1U : 0U;
+
+  if (codec_playing != 0U)
+  {
+    playback_start_pending = 0U;
+    return USBD_OK;
+  }
+
+  return USBD_FAIL;
 }
 
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
@@ -405,6 +475,7 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s)
 static int8_t CS43L22_Init(uint8_t volume)
 {
   uint8_t reg_value = 0U;
+  UNUSED(volume);
 
   HAL_GPIO_WritePin(Audio_RST_GPIO_Port, Audio_RST_Pin, GPIO_PIN_RESET);
   HAL_Delay(5U);
@@ -432,9 +503,9 @@ static int8_t CS43L22_Init(uint8_t volume)
       (CS43L22_Write(CS43L22_REG_PLAYBACK_CTL2, 0x00U) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_LIMIT_CTL1, 0x00U) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_TONE_CTL, 0x0FU) != USBD_OK) ||
-      (CS43L22_Write(CS43L22_REG_PCMA_VOL, 0x0AU) != USBD_OK) ||
-      (CS43L22_Write(CS43L22_REG_PCMB_VOL, 0x0AU) != USBD_OK) ||
-      (CS43L22_SetVolume(volume) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_PCMA_VOL, AUDIO_CODEC_PCM_VOLUME) != USBD_OK) ||
+      (CS43L22_Write(CS43L22_REG_PCMB_VOL, AUDIO_CODEC_PCM_VOLUME) != USBD_OK) ||
+      (CS43L22_SetVolume(AUDIO_CODEC_FIXED_VOLUME) != USBD_OK) ||
       (CS43L22_SetMute(audio_muted) != USBD_OK))
   {
     return (USBD_FAIL);
