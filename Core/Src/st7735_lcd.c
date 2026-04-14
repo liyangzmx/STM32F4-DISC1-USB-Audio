@@ -217,13 +217,13 @@ void ST7735_FillScreen(uint16_t color)
   // 设置窗口为整个屏幕
   lcd_write_command(0x2A);  // Column Address Set
   lcd_write_data(0x00);
-  lcd_write_data(0x00 + ST7735_X_OFFSET);
+  lcd_write_data(0x00);
   lcd_write_data(0x00);
   lcd_write_data((uint8_t)(ST7735_WIDTH - 1 + ST7735_X_OFFSET));
 
   lcd_write_command(0x2B);  // Row Address Set
   lcd_write_data(0x00);
-  lcd_write_data(0x00 + ST7735_Y_OFFSET);
+  lcd_write_data(0x00);
   lcd_write_data(0x00);
   lcd_write_data((uint8_t)(ST7735_HEIGHT - 1 + ST7735_Y_OFFSET));
 
@@ -264,14 +264,14 @@ void ST7735_FillRect(uint16_t x_start, uint16_t y_start, uint16_t x_end, uint16_
   // 设置列地址
   lcd_write_command(0x2A);  // Column Address Set
   lcd_write_data(0x00);
-  lcd_write_data((uint8_t)(x_start + ST7735_X_OFFSET));
+  lcd_write_data((uint8_t)x_start);
   lcd_write_data(0x00);
   lcd_write_data((uint8_t)(x_end + ST7735_X_OFFSET));
 
   // 设置行地址
   lcd_write_command(0x2B);  // Row Address Set
   lcd_write_data(0x00);
-  lcd_write_data((uint8_t)(y_start + ST7735_Y_OFFSET));
+  lcd_write_data((uint8_t)y_start);
   lcd_write_data(0x00);
   lcd_write_data((uint8_t)(y_end + ST7735_Y_OFFSET));
 

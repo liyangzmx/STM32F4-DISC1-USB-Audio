@@ -54,6 +54,12 @@ osThreadId defaultTaskHandle;
 osThreadId audioTaskHandle;
 osThreadId lcdTaskHandle;
 /* USER CODE BEGIN PV */
+static lv_obj_t *ui_usb_status_val = NULL;
+static lv_obj_t *ui_playback_val = NULL;
+static lv_obj_t *ui_codec_val = NULL;
+static lv_obj_t *ui_sample_rate_val = NULL;
+static lv_obj_t *ui_volume_val = NULL;
+static lv_obj_t *ui_mute_val = NULL;
 
 /* USER CODE END PV */
 
@@ -129,15 +135,15 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 512);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* definition and creation of audioTask */
-  osThreadDef(audioTask, StartAudioTask, osPriorityAboveNormal, 0, 128);
+  osThreadDef(audioTask, StartAudioTask, osPriorityHigh, 0, 512);
   audioTaskHandle = osThreadCreate(osThread(audioTask), NULL);
 
   /* definition and creation of lcdTask */
-  osThreadDef(lcdTask, StartLcdTask, osPriorityLow, 0, 256);
+  osThreadDef(lcdTask, StartLcdTask, osPriorityLow, 0, 2048);
   lcdTaskHandle = osThreadCreate(osThread(lcdTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -370,6 +376,59 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static lv_obj_t *create_info_row(lv_obj_t *parent, const char *name, lv_coord_t y)
+{
+  lv_obj_t *label = lv_label_create(parent);
+  lv_label_set_text(label, name);
+  lv_obj_align(label, LV_ALIGN_TOP_LEFT, 6, y);
+  lv_obj_set_style_text_color(label, lv_color_hex(0xB0B0B0), LV_PART_MAIN);
+  lv_obj_set_style_text_font(label, &lv_font_montserrat_12, LV_PART_MAIN);
+
+  lv_obj_t *value = lv_label_create(parent);
+  lv_label_set_text(value, "--");
+  lv_obj_align(value, LV_ALIGN_TOP_RIGHT, -6, y);
+  lv_obj_set_style_text_color(value, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_style_text_font(value, &lv_font_montserrat_12, LV_PART_MAIN);
+
+  return value;
+}
+
+static void update_audio_info_ui(void)
+{
+  if (ui_usb_status_val != NULL)
+  {
+    lv_label_set_text(ui_usb_status_val, "Connected");
+  }
+
+  if (ui_playback_val != NULL)
+  {
+    lv_label_set_text(ui_playback_val,
+                      (AUDIO_UI_GetPlaying() != 0U) ? "Active" : "Idle");
+  }
+
+  if (ui_codec_val != NULL)
+  {
+    lv_label_set_text(ui_codec_val,
+                      (AUDIO_UI_GetCodecReady() != 0U) ? "Ready" : "Off");
+  }
+
+  if (ui_sample_rate_val != NULL)
+  {
+    lv_label_set_text_fmt(ui_sample_rate_val, "%lu Hz",
+                          (unsigned long)AUDIO_UI_GetSampleRate());
+  }
+
+  if (ui_volume_val != NULL)
+  {
+    lv_label_set_text_fmt(ui_volume_val, "%u%%", AUDIO_UI_GetVolume());
+  }
+
+  if (ui_mute_val != NULL)
+  {
+    lv_label_set_text(ui_mute_val,
+                      (AUDIO_UI_GetMuted() != 0U) ? "Muted" : "Off");
+  }
+}
 
 /* USER CODE END 4 */
 
@@ -383,122 +442,27 @@ static void create_audio_info_ui(void)
   
   /* Set background color to black */
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
-  
-  /* TEST: Add simple colored squares to verify rendering */
-  /* Red square - top left */
-  lv_obj_t *red_box = lv_obj_create(scr);
-  lv_obj_set_size(red_box, 30, 30);
-  lv_obj_set_align(red_box, LV_ALIGN_TOP_LEFT);
-  lv_obj_set_pos(red_box, 0, 0);
-  lv_obj_set_style_bg_color(red_box, lv_color_hex(0xFF0000), LV_PART_MAIN);
-  lv_obj_set_style_border_width(red_box, 0, LV_PART_MAIN);
-  
-  /* Green square - top center */
-  lv_obj_t *green_box = lv_obj_create(scr);
-  lv_obj_set_size(green_box, 30, 30);
-  lv_obj_set_align(green_box, LV_ALIGN_TOP_MID);
-  lv_obj_set_pos(green_box, 0, 10);
-  lv_obj_set_style_bg_color(green_box, lv_color_hex(0x00FF00), LV_PART_MAIN);
-  lv_obj_set_style_border_width(green_box, 0, LV_PART_MAIN);
-  
-  /* Blue square - top right */
-  lv_obj_t *blue_box = lv_obj_create(scr);
-  lv_obj_set_size(blue_box, 30, 30);
-  lv_obj_set_align(blue_box, LV_ALIGN_TOP_RIGHT);
-  lv_obj_set_pos(blue_box, 0, 0);
-  lv_obj_set_style_bg_color(blue_box, lv_color_hex(0x0000FF), LV_PART_MAIN);
-  lv_obj_set_style_border_width(blue_box, 0, LV_PART_MAIN);
-  
-  /* Yellow square - center */
-  lv_obj_t *yellow_box = lv_obj_create(scr);
-  lv_obj_set_size(yellow_box, 40, 40);
-  lv_obj_align(yellow_box, LV_ALIGN_CENTER, 0, 20);
-  lv_obj_set_style_bg_color(yellow_box, lv_color_hex(0xFFFF00), LV_PART_MAIN);
-  lv_obj_set_style_border_width(yellow_box, 0, LV_PART_MAIN);
-  
-  /* Cyan square - bottom left */
-  lv_obj_t *cyan_box = lv_obj_create(scr);
-  lv_obj_set_size(cyan_box, 30, 30);
-  lv_obj_align(cyan_box, LV_ALIGN_BOTTOM_LEFT, 5, -5);
-  lv_obj_set_style_bg_color(cyan_box, lv_color_hex(0x00FFFF), LV_PART_MAIN);
-  lv_obj_set_style_border_width(cyan_box, 0, LV_PART_MAIN);
-  
-  /* Magenta square - bottom right */
-  lv_obj_t *magenta_box = lv_obj_create(scr);
-  lv_obj_set_size(magenta_box, 30, 30);
-  lv_obj_align(magenta_box, LV_ALIGN_BOTTOM_RIGHT, -5, -5);
-  lv_obj_set_style_bg_color(magenta_box, lv_color_hex(0xFF00FF), LV_PART_MAIN);
-  lv_obj_set_style_border_width(magenta_box, 0, LV_PART_MAIN);
-  
-  /* Simple test label in the middle */
-  lv_obj_t *test_label = lv_label_create(scr);
-  lv_label_set_text(test_label, "LVGL OK");
-  lv_obj_align(test_label, LV_ALIGN_CENTER, 0, -20);
-  lv_obj_set_style_text_color(test_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(test_label, &lv_font_montserrat_14, LV_PART_MAIN);
-  
-  /* Title Label: "USB Audio Info" */
+
   lv_obj_t *title = lv_label_create(scr);
-  lv_label_set_text(title, "USB AUDIO");
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 45);
-  lv_obj_set_style_text_color(title, lv_color_hex(0x00FF00), LV_PART_MAIN);
+  lv_label_set_text(title, "USB AUDIO STATUS");
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
+  lv_obj_set_style_text_color(title, lv_color_hex(0x00D0FF), LV_PART_MAIN);
   lv_obj_set_style_text_font(title, &lv_font_montserrat_14, LV_PART_MAIN);
-  
-  /* Horizontal separator line */
+
   lv_obj_t *line1 = lv_obj_create(scr);
-  lv_obj_set_size(line1, 128, 2);
-  lv_obj_align(line1, LV_ALIGN_TOP_MID, 0, 62);
-  lv_obj_set_style_bg_color(line1, lv_color_hex(0x00FF00), LV_PART_MAIN);
+  lv_obj_set_size(line1, 116, 2);
+  lv_obj_align(line1, LV_ALIGN_TOP_MID, 0, 28);
+  lv_obj_set_style_bg_color(line1, lv_color_hex(0x00D0FF), LV_PART_MAIN);
   lv_obj_set_style_border_width(line1, 0, LV_PART_MAIN);
-  
-  /* USB Status Label */
-  lv_obj_t *usb_status_label = lv_label_create(scr);
-  lv_label_set_text(usb_status_label, "USB:");
-  lv_obj_align(usb_status_label, LV_ALIGN_TOP_LEFT, 5, 70);
-  lv_obj_set_style_text_color(usb_status_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_style_text_font(usb_status_label, &lv_font_montserrat_12, LV_PART_MAIN);
-  
-  /* USB Status Value */
-  lv_obj_t *usb_status_val = lv_label_create(scr);
-  lv_label_set_text(usb_status_val, "OK");
-  lv_obj_align(usb_status_val, LV_ALIGN_TOP_RIGHT, -5, 70);
-  lv_obj_set_style_text_color(usb_status_val, lv_color_hex(0xFFFF00), LV_PART_MAIN);
-  lv_obj_set_style_text_font(usb_status_val, &lv_font_montserrat_12, LV_PART_MAIN);
-  
-  /* Device Label */
-  lv_obj_t *device_label = lv_label_create(scr);
-  lv_label_set_text(device_label, "Device:");
-  lv_obj_align(device_label, LV_ALIGN_TOP_LEFT, 5, 90);
-  lv_obj_set_style_text_color(device_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_style_text_font(device_label, &lv_font_montserrat_12, LV_PART_MAIN);
-  
-  /* Device Value */
-  lv_obj_t *device_val = lv_label_create(scr);
-  lv_label_set_text(device_val, "HPH");
-  lv_obj_align(device_val, LV_ALIGN_TOP_RIGHT, -5, 90);
-  lv_obj_set_style_text_color(device_val, lv_color_hex(0xFFFF00), LV_PART_MAIN);
-  lv_obj_set_style_text_font(device_val, &lv_font_montserrat_12, LV_PART_MAIN);
-  
-  /* Sample Rate Label */
-  lv_obj_t *sample_rate_label = lv_label_create(scr);
-  lv_label_set_text(sample_rate_label, "48kHz");
-  lv_obj_align(sample_rate_label, LV_ALIGN_TOP_LEFT, 5, 110);
-  lv_obj_set_style_text_color(sample_rate_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_style_text_font(sample_rate_label, &lv_font_montserrat_12, LV_PART_MAIN);
-  
-  /* Volume Label */
-  lv_obj_t *volume_label = lv_label_create(scr);
-  lv_label_set_text(volume_label, "Vol:");
-  lv_obj_align(volume_label, LV_ALIGN_TOP_LEFT, 5, 130);
-  lv_obj_set_style_text_color(volume_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_style_text_font(volume_label, &lv_font_montserrat_12, LV_PART_MAIN);
-  
-  /* Volume Value */
-  lv_obj_t *volume_val = lv_label_create(scr);
-  lv_label_set_text(volume_val, "100%");
-  lv_obj_align(volume_val, LV_ALIGN_TOP_RIGHT, -5, 130);
-  lv_obj_set_style_text_color(volume_val, lv_color_hex(0xFFFF00), LV_PART_MAIN);
-  lv_obj_set_style_text_font(volume_val, &lv_font_montserrat_12, LV_PART_MAIN);
+
+  ui_usb_status_val = create_info_row(scr, "USB Link", 40);
+  ui_playback_val = create_info_row(scr, "Playback", 60);
+  ui_codec_val = create_info_row(scr, "Codec", 80);
+  ui_sample_rate_val = create_info_row(scr, "Sample Rate", 100);
+  ui_volume_val = create_info_row(scr, "Volume", 120);
+  ui_mute_val = create_info_row(scr, "Mute", 140);
+
+  update_audio_info_ui();
 }
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -537,6 +501,8 @@ void StartAudioTask(void const * argument)
 
 void StartLcdTask(void const * argument)
 {
+  uint32_t ui_update_tick = 0U;
+
   /* USER CODE BEGIN StartLcdTask */
   UNUSED(argument);
 
@@ -550,6 +516,12 @@ void StartLcdTask(void const * argument)
   /* Main loop: handle LVGL tasks with sufficient delay to avoid blocking audio */
   for(;;)
   {
+    if ((HAL_GetTick() - ui_update_tick) >= 200U)
+    {
+      update_audio_info_ui();
+      ui_update_tick = HAL_GetTick();
+    }
+
     /* Handle LVGL tasks every 30ms (don't update too frequently) */
     lv_timer_handler();
     osDelay(30);
@@ -578,6 +550,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
 
   /* USER CODE END Callback 1 */
+}
+
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+{
+  UNUSED(xTask);
+  UNUSED(pcTaskName);
+
+  __disable_irq();
+
+  while (1)
+  {
+    HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+    HAL_Delay(100);
+  }
 }
 
 /**

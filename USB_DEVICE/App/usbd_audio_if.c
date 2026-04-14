@@ -466,6 +466,31 @@ void AUDIO_ServiceTaskStep(void)
   }
 }
 
+uint8_t AUDIO_UI_GetVolume(void)
+{
+  return audio_volume;
+}
+
+uint8_t AUDIO_UI_GetMuted(void)
+{
+  return audio_muted;
+}
+
+uint8_t AUDIO_UI_GetPlaying(void)
+{
+  return codec_playing;
+}
+
+uint8_t AUDIO_UI_GetCodecReady(void)
+{
+  return codec_initialized;
+}
+
+uint32_t AUDIO_UI_GetSampleRate(void)
+{
+  return USBD_AUDIO_FREQ;
+}
+
 static void AUDIO_ClearUsbRingBuffer(void)
 {
   USBD_AUDIO_HandleTypeDef *haudio;

@@ -116,6 +116,11 @@ void HalfTransfer_CallBack_FS(void);
 
 /* USER CODE BEGIN EXPORTED_FUNCTIONS */
 void AUDIO_ServiceTaskStep(void);
+uint8_t AUDIO_UI_GetVolume(void);
+uint8_t AUDIO_UI_GetMuted(void);
+uint8_t AUDIO_UI_GetPlaying(void);
+uint8_t AUDIO_UI_GetCodecReady(void);
+uint32_t AUDIO_UI_GetSampleRate(void);
 
 /* USER CODE END EXPORTED_FUNCTIONS */
 
