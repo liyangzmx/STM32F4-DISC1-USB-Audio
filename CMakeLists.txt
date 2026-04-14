@@ -44,13 +44,13 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    Core/Src/st7735_lcd.c
+    Core/Src/oled_display.c
 )
 
 # Add LVGL sources
 file(GLOB_RECURSE LVGL_SOURCES
     "Middlewares/Third_Party/LVGL/src/*.c"
-    "Middlewares/Third_Party/LVGL/lv_port_disp_st7735s.c"
+    "Middlewares/Third_Party/LVGL/lv_port_disp_oled.c"
 )
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE

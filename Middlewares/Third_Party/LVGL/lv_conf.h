@@ -1,6 +1,6 @@
 /**
  * @file lv_conf.h
- * LVGL configuration for STM32F407 with ST7735S display
+ * LVGL configuration for STM32F407 with 128x64 OLED display
  */
 
 #ifndef LV_CONF_H
@@ -11,7 +11,7 @@
  *====================*/
 
 /* Color depth: 1 (1 byte per pixel), 8 (RGB332), 16 (RGB565), 32 (ARGB8888) */
-#define LV_COLOR_DEPTH 16
+#define LV_COLOR_DEPTH 1
 
 /* Swap the 2 bytes of RGB565 color. Useful if the display has a 8 bit interface (e.g. SPI)*/
 #define LV_COLOR_16_SWAP 0
@@ -31,7 +31,7 @@
 #define LV_HOR_RES_MAX         128
 
 /* Vertical resolution of your display in pixels */
-#define LV_VER_RES_MAX         160
+#define LV_VER_RES_MAX         64
 
 /* Dot Per Inch: used to initialize default sizes. E.g. `lv_img_dsc_t` w and h . LV_DPI_DEF should be set to 100 then 1 dp = 1 cm
  * Set it to 0 if not known at design time. LV_DPI_DEF will be used then. */
@@ -218,7 +218,7 @@
 /* Demonstrate special features */
 #define LV_FONT_UNSCII_8_COMPRESSED 0   /**< bpp = 4*/
 
-#define LV_FONT_DEFAULT &lv_font_montserrat_12   /**< lv_conf.h can be changed at runtime. Then default font is used if not set by user*/
+#define LV_FONT_DEFAULT &lv_font_montserrat_8   /**< lv_conf.h can be changed at runtime. Then default font is used if not set by user*/
 
 /*===================
  * TEXT SETTINGS

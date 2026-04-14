@@ -108,28 +108,24 @@ void UI_RequestAudioStatusRefresh(void);
 #define Audio_RST_GPIO_Port GPIOD
 #define OTG_FS_OverCurrent_Pin GPIO_PIN_5
 #define OTG_FS_OverCurrent_GPIO_Port GPIOD
-#define SWO_Pin GPIO_PIN_3
-#define SWO_GPIO_Port GPIOB
+#define OLED_RES_Pin GPIO_PIN_3
+#define OLED_RES_GPIO_Port GPIOB
+#define OLED_CS_Pin GPIO_PIN_5
+#define OLED_CS_GPIO_Port GPIOB
 #define Audio_SCL_Pin GPIO_PIN_6
 #define Audio_SCL_GPIO_Port GPIOB
 #define Audio_SDA_Pin GPIO_PIN_9
 #define Audio_SDA_GPIO_Port GPIOB
+#define OLED_SCL_Pin GPIO_PIN_10
+#define OLED_SCL_GPIO_Port GPIOB
+#define OLED_SDA_Pin GPIO_PIN_11
+#define OLED_SDA_GPIO_Port GPIOB
 #define MEMS_INT2_Pin GPIO_PIN_1
 #define MEMS_INT2_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
-#define LCD_RST_Pin GPIO_PIN_11
-#define LCD_RST_GPIO_Port GPIOD
-#define LCD_DC_Pin GPIO_PIN_10
-#define LCD_DC_GPIO_Port GPIOD
-#define LCD_BLK_Pin GPIO_PIN_9
-#define LCD_BLK_GPIO_Port GPIOD
-#define LCD_CS_Pin GPIO_PIN_3
-#define LCD_CS_GPIO_Port GPIOA
-#define LCD_SCL_Pin GPIO_PIN_1
-#define LCD_SCL_GPIO_Port GPIOA
-#define LCD_SDA_Pin GPIO_PIN_2
-#define LCD_SDA_GPIO_Port GPIOA
+#define OLED_DC_Pin GPIO_PIN_6
+#define OLED_DC_GPIO_Port GPIOD
 
 /* USER CODE END Private defines */
 
