@@ -398,20 +398,20 @@ static lv_obj_t *create_info_row(lv_obj_t *parent, const char *name, lv_coord_t 
 {
   lv_obj_t *label = lv_label_create(parent);
   lv_label_set_text(label, name);
-  lv_obj_set_size(label, 62, LV_SIZE_CONTENT);
+  lv_obj_set_size(label, 56, LV_SIZE_CONTENT);
   lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
   lv_obj_align(label, LV_ALIGN_TOP_LEFT, 6, y);
   lv_obj_set_style_text_color(label, lv_color_hex(0xB0B0B0), LV_PART_MAIN);
-  lv_obj_set_style_text_font(label, &lv_font_montserrat_8, LV_PART_MAIN);
+  lv_obj_set_style_text_font(label, &lv_font_montserrat_12, LV_PART_MAIN);
 
   lv_obj_t *value = lv_label_create(parent);
   lv_label_set_text(value, "--");
-  lv_obj_set_size(value, 54, LV_SIZE_CONTENT);
+  lv_obj_set_size(value, 70, LV_SIZE_CONTENT);
   lv_label_set_long_mode(value, LV_LABEL_LONG_CLIP);
   lv_obj_set_style_text_align(value, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
   lv_obj_align(value, LV_ALIGN_TOP_RIGHT, -6, y);
   lv_obj_set_style_text_color(value, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(value, &lv_font_montserrat_8, LV_PART_MAIN);
+  lv_obj_set_style_text_font(value, &lv_font_montserrat_12, LV_PART_MAIN);
 
   return value;
 }
@@ -527,20 +527,20 @@ static void create_audio_info_ui(void)
   lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
   lv_obj_set_style_text_color(title, lv_color_hex(0x00D0FF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_8, LV_PART_MAIN);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_14, LV_PART_MAIN);
 
   lv_obj_t *line1 = lv_obj_create(scr);
   lv_obj_set_size(line1, 116, 2);
-  lv_obj_align(line1, LV_ALIGN_TOP_MID, 0, 24);
+  lv_obj_align(line1, LV_ALIGN_TOP_MID, 0, 30);
   lv_obj_set_style_bg_color(line1, lv_color_hex(0x00D0FF), LV_PART_MAIN);
   lv_obj_set_style_border_width(line1, 0, LV_PART_MAIN);
 
-  ui_usb_status_val = create_info_row(scr, "USB Link", 34);
-  ui_playback_val = create_info_row(scr, "Playback", 50);
-  ui_codec_val = create_info_row(scr, "Codec", 66);
-  ui_sample_rate_val = create_info_row(scr, "Sample Rate", 82);
-  ui_volume_val = create_info_row(scr, "Volume", 98);
-  ui_mute_val = create_info_row(scr, "Mute", 114);
+  ui_usb_status_val = create_info_row(scr, "LINK", 40);
+  ui_playback_val = create_info_row(scr, "PLAY", 58);
+  ui_codec_val = create_info_row(scr, "STA", 76);
+  ui_sample_rate_val = create_info_row(scr, "RATE", 94);
+  ui_volume_val = create_info_row(scr, "VOL", 112);
+  ui_mute_val = create_info_row(scr, "MUTE", 130);
 
   update_audio_info_ui();
 }
