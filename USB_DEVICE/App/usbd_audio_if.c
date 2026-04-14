@@ -68,7 +68,7 @@
 #define CS43L22_OUTPUT_HEADPHONE      0xAFU
 #define CS43L22_I2C_TIMEOUT_MS        100U
 #define AUDIO_USB_PACKET_TIMEOUT_MS   20U
-#define AUDIO_CODEC_FIXED_VOLUME      82U
+#define AUDIO_CODEC_FIXED_VOLUME      95U
 #define AUDIO_CODEC_PCM_VOLUME        0x00U
 
 #define CS43L22_REG_POWER_CTL1        0x02U
@@ -119,7 +119,8 @@
   */
 
 /* USER CODE BEGIN PRIVATE_VARIABLES */
-static uint8_t audio_muted = 0U;
+static uint8_t audio_user_muted = 0U;
+static uint8_t audio_output_muted = 0U;
 static uint8_t codec_initialized = 0U;
 static uint8_t codec_playing = 0U;
 static uint8_t audio_volume = AUDIO_CODEC_FIXED_VOLUME;
@@ -178,6 +179,7 @@ static int8_t CS43L22_SetMute(uint8_t muted);
 static int8_t CS43L22_Write(uint8_t reg, uint8_t value);
 static int8_t CS43L22_Read(uint8_t reg, uint8_t *value);
 static uint8_t CS43L22_ConvertVolume(uint8_t volume);
+static uint8_t AUDIO_ClampVolume(uint8_t volume);
 static void AUDIO_ClearUsbRingBuffer(void);
 static void AUDIO_ResetUsbStreamState(void);
 static int8_t AUDIO_StartPlaybackDma(void);
@@ -219,9 +221,9 @@ static int8_t AUDIO_Init_FS(uint32_t AudioFreq, uint32_t Volume, uint32_t option
     return (USBD_FAIL);
   }
 
-  audio_volume = (uint8_t)Volume;
-  audio_volume = AUDIO_CODEC_FIXED_VOLUME;
-  audio_muted = 0U;
+  audio_volume = AUDIO_ClampVolume((uint8_t)Volume);
+  audio_user_muted = 0U;
+  audio_output_muted = 0U;
   codec_playing = 0U;
   playback_start_pending = 0U;
   codec_init_requested = 0U;
@@ -314,7 +316,7 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
 static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
 {
   /* USER CODE BEGIN 3 */
-  audio_volume = vol;
+  audio_volume = AUDIO_ClampVolume(vol);
   AUDIO_UI_NotifyChanged();
 
   if (codec_initialized == 0U)
@@ -322,7 +324,7 @@ static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
     return (USBD_OK);
   }
 
-  return CS43L22_SetVolume(vol);
+  return CS43L22_SetVolume(audio_volume);
   /* USER CODE END 3 */
 }
 
@@ -334,15 +336,16 @@ static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
 static int8_t AUDIO_MuteCtl_FS(uint8_t cmd)
 {
   /* USER CODE BEGIN 4 */
-  audio_muted = (cmd != 0U) ? 1U : 0U;
+  audio_user_muted = (cmd != 0U) ? 1U : 0U;
   AUDIO_UI_NotifyChanged();
 
   if (codec_initialized == 0U)
   {
+    audio_output_muted = audio_user_muted;
     return (USBD_OK);
   }
 
-  return CS43L22_SetMute(cmd);
+  return CS43L22_SetMute(audio_user_muted);
   /* USER CODE END 4 */
 }
 
@@ -491,7 +494,7 @@ uint8_t AUDIO_UI_GetVolume(void)
 
 uint8_t AUDIO_UI_GetMuted(void)
 {
-  return audio_muted;
+  return audio_output_muted;
 }
 
 uint8_t AUDIO_UI_GetPlaying(void)
@@ -523,6 +526,16 @@ static void AUDIO_UI_NotifyChanged(void)
 {
   audio_ui_update_counter++;
   UI_RequestAudioStatusRefresh();
+}
+
+static uint8_t AUDIO_ClampVolume(uint8_t volume)
+{
+  if (volume > AUDIO_CODEC_FIXED_VOLUME)
+  {
+    return AUDIO_CODEC_FIXED_VOLUME;
+  }
+
+  return volume;
 }
 
 static void AUDIO_ClearUsbRingBuffer(void)
@@ -635,7 +648,7 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s)
 static int8_t CS43L22_Init(uint8_t volume)
 {
   uint8_t reg_value = 0U;
-  UNUSED(volume);
+  volume = AUDIO_ClampVolume(volume);
 
   HAL_GPIO_WritePin(Audio_RST_GPIO_Port, Audio_RST_Pin, GPIO_PIN_RESET);
   HAL_Delay(5U);
@@ -665,8 +678,8 @@ static int8_t CS43L22_Init(uint8_t volume)
       (CS43L22_Write(CS43L22_REG_TONE_CTL, 0x0FU) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_PCMA_VOL, AUDIO_CODEC_PCM_VOLUME) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_PCMB_VOL, AUDIO_CODEC_PCM_VOLUME) != USBD_OK) ||
-      (CS43L22_SetVolume(AUDIO_CODEC_FIXED_VOLUME) != USBD_OK) ||
-      (CS43L22_SetMute(audio_muted) != USBD_OK))
+      (CS43L22_SetVolume(volume) != USBD_OK) ||
+      (CS43L22_SetMute(audio_user_muted) != USBD_OK))
   {
     return (USBD_FAIL);
   }
@@ -691,7 +704,7 @@ static int8_t CS43L22_Play(void)
   }
 
   if ((CS43L22_Write(CS43L22_REG_MISC_CTL, 0x06U) != USBD_OK) ||
-      (CS43L22_SetMute(audio_muted) != USBD_OK) ||
+      (CS43L22_SetMute(audio_user_muted) != USBD_OK) ||
       (CS43L22_Write(CS43L22_REG_POWER_CTL1, 0x9EU) != USBD_OK))
   {
     return (USBD_FAIL);
@@ -742,9 +755,9 @@ static int8_t CS43L22_SetVolume(uint8_t volume)
 
 static int8_t CS43L22_SetMute(uint8_t muted)
 {
-  audio_muted = (muted != 0U) ? 1U : 0U;
+  audio_output_muted = (muted != 0U) ? 1U : 0U;
 
-  if (audio_muted != 0U)
+  if (audio_output_muted != 0U)
   {
     if ((CS43L22_Write(CS43L22_REG_POWER_CTL2, 0xFFU) != USBD_OK) ||
         (CS43L22_Write(CS43L22_REG_HEADPHONE_A_VOL, 0x01U) != USBD_OK) ||
@@ -763,6 +776,7 @@ static int8_t CS43L22_SetMute(uint8_t muted)
     }
   }
 
+  AUDIO_UI_NotifyChanged();
   return (USBD_OK);
 }
 

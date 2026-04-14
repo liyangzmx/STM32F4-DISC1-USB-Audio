@@ -135,7 +135,6 @@ static void AUDIO_REQ_SetCurrent(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef 
 static void *USBD_AUDIO_GetAudioHeaderDesc(uint8_t *pConfDesc);
 static void AUDIO_STORE_INT16(uint8_t *buf, int16_t value);
 static uint8_t AUDIO_USB_VolumeToPercent(int16_t raw);
-static uint32_t AUDIO_ISqrt(uint32_t value);
 
 /**
   * @}
@@ -345,7 +344,7 @@ static int16_t audio_cur_volume = 0;
 static const int16_t audio_min_volume = -12800;
 static const int16_t audio_max_volume = 0;
 static const int16_t audio_res_volume = 256;
-static const uint8_t audio_codec_safe_max_percent = 82U;
+static const uint8_t audio_codec_safe_max_percent = 95U;
 /**
   * @}
   */
@@ -1053,8 +1052,6 @@ static void AUDIO_STORE_INT16(uint8_t *buf, int16_t value)
 static uint8_t AUDIO_USB_VolumeToPercent(int16_t raw)
 {
   int32_t linear;
-  uint32_t normalized;
-  uint32_t curved;
 
   if (raw <= audio_min_volume)
   {
@@ -1066,50 +1063,19 @@ static uint8_t AUDIO_USB_VolumeToPercent(int16_t raw)
     return audio_codec_safe_max_percent;
   }
 
-  linear = ((int32_t)(raw - audio_min_volume) * 1000) /
+  linear = ((int32_t)(raw - audio_min_volume) * (int32_t)audio_codec_safe_max_percent) /
            (int32_t)(audio_max_volume - audio_min_volume);
 
   if (linear < 0)
   {
     linear = 0;
   }
-  else if (linear > 1000)
+  else if (linear > (int32_t)audio_codec_safe_max_percent)
   {
-    linear = 1000;
+    linear = (int32_t)audio_codec_safe_max_percent;
   }
 
-  normalized = (uint32_t)linear;
-  curved = AUDIO_ISqrt(normalized * 1000U);
-
-  return (uint8_t)((curved * audio_codec_safe_max_percent + 500U) / 1000U);
-}
-
-static uint32_t AUDIO_ISqrt(uint32_t value)
-{
-  uint32_t result = 0U;
-  uint32_t bit = 1UL << 30;
-
-  while (bit > value)
-  {
-    bit >>= 2;
-  }
-
-  while (bit != 0U)
-  {
-    if (value >= (result + bit))
-    {
-      value -= result + bit;
-      result = (result >> 1) + bit;
-    }
-    else
-    {
-      result >>= 1;
-    }
-
-    bit >>= 2;
-  }
-
-  return result;
+  return (uint8_t)linear;
 }
 
 #ifdef USE_USBD_COMPOSITE
