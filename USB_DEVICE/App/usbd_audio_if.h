@@ -121,6 +121,8 @@ uint8_t AUDIO_UI_GetMuted(void);
 uint8_t AUDIO_UI_GetPlaying(void);
 uint8_t AUDIO_UI_GetCodecReady(void);
 uint32_t AUDIO_UI_GetSampleRate(void);
+uint8_t AUDIO_UI_GetPlaybackState(void);
+uint32_t AUDIO_UI_GetUpdateCounter(void);
 
 /* USER CODE END EXPORTED_FUNCTIONS */
 

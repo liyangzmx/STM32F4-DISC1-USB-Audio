@@ -33,6 +33,7 @@ static void lcd_write_command(uint8_t value);
 static void lcd_write_data(uint8_t value);
 static void lcd_reset(void);
 static void lcd_init_sequence_st7735s(void);
+static void lcd_set_window(uint16_t x_start, uint16_t y_start, uint16_t x_end, uint16_t y_end);
 
 static void lcd_gpio_init(void)
 {
@@ -202,6 +203,21 @@ static void lcd_init_sequence_st7735s(void)
   lcd_write_command(0x29);  // Display ON
 }
 
+static void lcd_set_window(uint16_t x_start, uint16_t y_start, uint16_t x_end, uint16_t y_end)
+{
+  lcd_write_command(0x2A);  // Column Address Set
+  lcd_write_data(0x00);
+  lcd_write_data((uint8_t)x_start);
+  lcd_write_data(0x00);
+  lcd_write_data((uint8_t)x_end);
+
+  lcd_write_command(0x2B);  // Row Address Set
+  lcd_write_data(0x00);
+  lcd_write_data((uint8_t)y_start);
+  lcd_write_data(0x00);
+  lcd_write_data((uint8_t)y_end);
+}
+
 void ST7735_Init(void)
 {
   lcd_gpio_init();
@@ -213,19 +229,12 @@ void ST7735_Init(void)
 void ST7735_FillScreen(uint16_t color)
 {
   uint32_t i;
+  uint16_t x_start = ST7735_X_OFFSET;
+  uint16_t y_start = ST7735_Y_OFFSET;
+  uint16_t x_end = (ST7735_WIDTH - 1U) + ST7735_X_OFFSET;
+  uint16_t y_end = (ST7735_HEIGHT - 1U) + ST7735_Y_OFFSET;
 
-  // 设置窗口为整个屏幕
-  lcd_write_command(0x2A);  // Column Address Set
-  lcd_write_data(0x00);
-  lcd_write_data(0x00);
-  lcd_write_data(0x00);
-  lcd_write_data((uint8_t)(ST7735_WIDTH - 1 + ST7735_X_OFFSET));
-
-  lcd_write_command(0x2B);  // Row Address Set
-  lcd_write_data(0x00);
-  lcd_write_data(0x00);
-  lcd_write_data(0x00);
-  lcd_write_data((uint8_t)(ST7735_HEIGHT - 1 + ST7735_Y_OFFSET));
+  lcd_set_window(x_start, y_start, x_end, y_end);
 
   // 开始写入GRAM，保持CS低电平
   lcd_pin_low(LCD_CS_GPIO_Port, LCD_CS_Pin);
@@ -259,41 +268,39 @@ void ST7735_FillScreen(uint16_t color)
  */
 void ST7735_FillRect(uint16_t x_start, uint16_t y_start, uint16_t x_end, uint16_t y_end, const uint16_t *colors)
 {
-  uint32_t pixel_count = (uint32_t)(x_end - x_start + 1) * (y_end - y_start + 1);
+  uint16_t row;
+  uint16_t col;
+  uint16_t width;
+  uint16_t hw_x_start = x_start + ST7735_X_OFFSET;
+  uint16_t hw_y_start = y_start + ST7735_Y_OFFSET;
+  uint16_t hw_x_end = x_end + ST7735_X_OFFSET;
+  width = (uint16_t)(x_end - x_start + 1U);
 
-  // 设置列地址
-  lcd_write_command(0x2A);  // Column Address Set
-  lcd_write_data(0x00);
-  lcd_write_data((uint8_t)x_start);
-  lcd_write_data(0x00);
-  lcd_write_data((uint8_t)(x_end + ST7735_X_OFFSET));
-
-  // 设置行地址
-  lcd_write_command(0x2B);  // Row Address Set
-  lcd_write_data(0x00);
-  lcd_write_data((uint8_t)y_start);
-  lcd_write_data(0x00);
-  lcd_write_data((uint8_t)(y_end + ST7735_Y_OFFSET));
-
-  // 发送GRAM写入命令，保持CS低
-  lcd_pin_low(LCD_CS_GPIO_Port, LCD_CS_Pin);
-  lcd_pin_low(LCD_DC_GPIO_Port, LCD_DC_Pin);
-  lcd_bus_delay();
-  
-  lcd_write_u8(0x2C);  // Memory Write command
-  
-  lcd_bus_delay();
-  lcd_pin_high(LCD_DC_GPIO_Port, LCD_DC_Pin);  // Switch to data mode
-  lcd_bus_delay();
-
-  // 填充所有像素
-  for (uint32_t i = 0; i < pixel_count; i++)
+  for (row = 0U; row <= (uint16_t)(y_end - y_start); row++)
   {
-    uint16_t color = colors[i];
-    lcd_write_u8((uint8_t)(color >> 8));
-    lcd_write_u8((uint8_t)color);
-  }
+    lcd_set_window(hw_x_start,
+                   (uint16_t)(hw_y_start + row),
+                   hw_x_end,
+                   (uint16_t)(hw_y_start + row));
 
-  lcd_bus_delay();
-  lcd_pin_high(LCD_CS_GPIO_Port, LCD_CS_Pin);  // Release CS
+    lcd_pin_low(LCD_CS_GPIO_Port, LCD_CS_Pin);
+    lcd_pin_low(LCD_DC_GPIO_Port, LCD_DC_Pin);
+    lcd_bus_delay();
+
+    lcd_write_u8(0x2C);
+
+    lcd_bus_delay();
+    lcd_pin_high(LCD_DC_GPIO_Port, LCD_DC_Pin);
+    lcd_bus_delay();
+
+    for (col = 0U; col < width; col++)
+    {
+      uint16_t color = colors[(uint32_t)row * width + col];
+      lcd_write_u8((uint8_t)(color >> 8));
+      lcd_write_u8((uint8_t)color);
+    }
+
+    lcd_bus_delay();
+    lcd_pin_high(LCD_CS_GPIO_Port, LCD_CS_Pin);
+  }
 }

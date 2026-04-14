@@ -90,6 +90,10 @@
 #define CS43L22_REG_PCMA_VOL          0x1AU
 #define CS43L22_REG_PCMB_VOL          0x1BU
 
+#define AUDIO_UI_STATE_IDLE           0U
+#define AUDIO_UI_STATE_STARTING       1U
+#define AUDIO_UI_STATE_ACTIVE         2U
+
 /* USER CODE END PRIVATE_DEFINES */
 
 /**
@@ -125,6 +129,8 @@ static volatile uint8_t playback_dma_start_requested = 0U;
 static volatile uint8_t playback_stop_requested = 0U;
 static volatile uint8_t codec_deinit_requested = 0U;
 static volatile uint32_t last_usb_packet_tick = 0U;
+static volatile uint32_t audio_ui_update_counter = 0U;
+static volatile uint8_t audio_ui_playback_state = AUDIO_UI_STATE_IDLE;
 
 /* USER CODE END PRIVATE_VARIABLES */
 
@@ -175,6 +181,7 @@ static uint8_t CS43L22_ConvertVolume(uint8_t volume);
 static void AUDIO_ClearUsbRingBuffer(void);
 static int8_t AUDIO_StartPlaybackDma(void);
 static void AUDIO_StopPlaybackPath(void);
+static void AUDIO_UI_NotifyChanged(void);
 
 /* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
 
@@ -221,7 +228,9 @@ static int8_t AUDIO_Init_FS(uint32_t AudioFreq, uint32_t Volume, uint32_t option
   playback_stop_requested = 0U;
   codec_deinit_requested = 0U;
   last_usb_packet_tick = HAL_GetTick();
+  audio_ui_playback_state = AUDIO_UI_STATE_IDLE;
   AUDIO_ClearUsbRingBuffer();
+  AUDIO_UI_NotifyChanged();
 
   return (USBD_OK);
   /* USER CODE END 0 */
@@ -238,6 +247,8 @@ static int8_t AUDIO_DeInit_FS(uint32_t options)
   UNUSED(options);
   playback_stop_requested = 1U;
   codec_deinit_requested = 1U;
+  audio_ui_playback_state = AUDIO_UI_STATE_IDLE;
+  AUDIO_UI_NotifyChanged();
   return (USBD_OK);
   /* USER CODE END 1 */
 }
@@ -264,6 +275,8 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
       playback_dma_start_requested = 0U;
       last_usb_packet_tick = HAL_GetTick();
       codec_init_requested = 1U;
+      audio_ui_playback_state = AUDIO_UI_STATE_STARTING;
+      AUDIO_UI_NotifyChanged();
     break;
 
     case AUDIO_CMD_PLAY:
@@ -278,6 +291,8 @@ static int8_t AUDIO_AudioCmd_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd)
     case AUDIO_CMD_STOP:
       playback_dma_start_requested = 0U;
       playback_stop_requested = 1U;
+      audio_ui_playback_state = AUDIO_UI_STATE_IDLE;
+      AUDIO_UI_NotifyChanged();
       status = HAL_OK;
     break;
 
@@ -299,6 +314,7 @@ static int8_t AUDIO_VolumeCtl_FS(uint8_t vol)
 {
   /* USER CODE BEGIN 3 */
   audio_volume = vol;
+  AUDIO_UI_NotifyChanged();
 
   if (codec_initialized == 0U)
   {
@@ -318,6 +334,7 @@ static int8_t AUDIO_MuteCtl_FS(uint8_t cmd)
 {
   /* USER CODE BEGIN 4 */
   audio_muted = (cmd != 0U) ? 1U : 0U;
+  AUDIO_UI_NotifyChanged();
 
   if (codec_initialized == 0U)
   {
@@ -491,6 +508,22 @@ uint32_t AUDIO_UI_GetSampleRate(void)
   return USBD_AUDIO_FREQ;
 }
 
+uint8_t AUDIO_UI_GetPlaybackState(void)
+{
+  return audio_ui_playback_state;
+}
+
+uint32_t AUDIO_UI_GetUpdateCounter(void)
+{
+  return audio_ui_update_counter;
+}
+
+static void AUDIO_UI_NotifyChanged(void)
+{
+  audio_ui_update_counter++;
+  UI_RequestAudioStatusRefresh();
+}
+
 static void AUDIO_ClearUsbRingBuffer(void)
 {
   USBD_AUDIO_HandleTypeDef *haudio;
@@ -529,6 +562,8 @@ static int8_t AUDIO_StartPlaybackDma(void)
   if (codec_playing != 0U)
   {
     playback_start_pending = 0U;
+    audio_ui_playback_state = AUDIO_UI_STATE_ACTIVE;
+    AUDIO_UI_NotifyChanged();
     return USBD_OK;
   }
 
@@ -540,6 +575,8 @@ static void AUDIO_StopPlaybackPath(void)
   codec_playing = 0U;
   playback_start_pending = 0U;
   playback_dma_start_requested = 0U;
+  audio_ui_playback_state = AUDIO_UI_STATE_IDLE;
+  AUDIO_UI_NotifyChanged();
 
   /*
    * When USB disappears, SPI/I2S DMA may still loop the last audio fragment
@@ -616,6 +653,7 @@ static int8_t CS43L22_Init(uint8_t volume)
   }
 
   codec_initialized = 1U;
+  AUDIO_UI_NotifyChanged();
   return (USBD_OK);
 }
 
@@ -623,6 +661,7 @@ static void CS43L22_DeInit(void)
 {
   codec_initialized = 0U;
   HAL_GPIO_WritePin(Audio_RST_GPIO_Port, Audio_RST_Pin, GPIO_PIN_RESET);
+  AUDIO_UI_NotifyChanged();
 }
 
 static int8_t CS43L22_Play(void)

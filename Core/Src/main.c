@@ -27,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "lvgl.h"
 #include "lv_port_disp_st7735s.h"
+#include "usbd_def.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,6 +54,7 @@ DMA_HandleTypeDef hdma_spi3_tx;
 osThreadId defaultTaskHandle;
 osThreadId audioTaskHandle;
 osThreadId lcdTaskHandle;
+osMessageQId uiEventQueueHandle;
 /* USER CODE BEGIN PV */
 static lv_obj_t *ui_usb_status_val = NULL;
 static lv_obj_t *ui_playback_val = NULL;
@@ -60,6 +62,8 @@ static lv_obj_t *ui_codec_val = NULL;
 static lv_obj_t *ui_sample_rate_val = NULL;
 static lv_obj_t *ui_volume_val = NULL;
 static lv_obj_t *ui_mute_val = NULL;
+static lv_obj_t *ui_root_screen = NULL;
+static uint32_t ui_last_audio_update_counter = 0U;
 
 /* USER CODE END PV */
 
@@ -74,11 +78,17 @@ void StartAudioTask(void const * argument);
 void StartLcdTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
+static void create_audio_info_ui(void);
+extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+#define UI_PLAYBACK_STATE_IDLE      0U
+#define UI_PLAYBACK_STATE_STARTING  1U
+#define UI_PLAYBACK_STATE_ACTIVE    2U
+#define UI_EVENT_AUDIO_REFRESH      1U
 /* USER CODE END 0 */
 
 /**
@@ -130,7 +140,9 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
+  /* definition and creation of uiEventQueue */
+  osMessageQDef(uiEventQueue, 8, uint16_t);
+  uiEventQueueHandle = osMessageCreate(osMessageQ(uiEventQueue), NULL);
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -143,7 +155,7 @@ int main(void)
   audioTaskHandle = osThreadCreate(osThread(audioTask), NULL);
 
   /* definition and creation of lcdTask */
-  osThreadDef(lcdTask, StartLcdTask, osPriorityLow, 0, 2048);
+  osThreadDef(lcdTask, StartLcdTask, osPriorityNormal, 0, 2048);
   lcdTaskHandle = osThreadCreate(osThread(lcdTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -162,6 +174,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    osDelay(30);
   }
   /* USER CODE END 3 */
 }
@@ -376,34 +389,82 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static uint32_t lvgl_tick_get_cb(void)
+{
+  return HAL_GetTick();
+}
+
 static lv_obj_t *create_info_row(lv_obj_t *parent, const char *name, lv_coord_t y)
 {
   lv_obj_t *label = lv_label_create(parent);
   lv_label_set_text(label, name);
+  lv_obj_set_size(label, 62, LV_SIZE_CONTENT);
+  lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
   lv_obj_align(label, LV_ALIGN_TOP_LEFT, 6, y);
   lv_obj_set_style_text_color(label, lv_color_hex(0xB0B0B0), LV_PART_MAIN);
-  lv_obj_set_style_text_font(label, &lv_font_montserrat_12, LV_PART_MAIN);
+  lv_obj_set_style_text_font(label, &lv_font_montserrat_8, LV_PART_MAIN);
 
   lv_obj_t *value = lv_label_create(parent);
   lv_label_set_text(value, "--");
+  lv_obj_set_size(value, 54, LV_SIZE_CONTENT);
+  lv_label_set_long_mode(value, LV_LABEL_LONG_CLIP);
+  lv_obj_set_style_text_align(value, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
   lv_obj_align(value, LV_ALIGN_TOP_RIGHT, -6, y);
   lv_obj_set_style_text_color(value, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(value, &lv_font_montserrat_12, LV_PART_MAIN);
+  lv_obj_set_style_text_font(value, &lv_font_montserrat_8, LV_PART_MAIN);
 
   return value;
 }
 
 static void update_audio_info_ui(void)
 {
+  const char *usb_status_text = "Detached";
+  const char *playback_text = "Idle";
+
+  switch (hUsbDeviceFS.dev_state)
+  {
+    case USBD_STATE_CONFIGURED:
+      usb_status_text = "Configured";
+      break;
+
+    case USBD_STATE_ADDRESSED:
+      usb_status_text = "Addressed";
+      break;
+
+    case USBD_STATE_SUSPENDED:
+      usb_status_text = "Suspended";
+      break;
+
+    case USBD_STATE_DEFAULT:
+    default:
+      usb_status_text = "Detached";
+      break;
+  }
+
+  switch (AUDIO_UI_GetPlaybackState())
+  {
+    case UI_PLAYBACK_STATE_ACTIVE:
+      playback_text = "Active";
+      break;
+
+    case UI_PLAYBACK_STATE_STARTING:
+      playback_text = "Starting";
+      break;
+
+    case UI_PLAYBACK_STATE_IDLE:
+    default:
+      playback_text = "Idle";
+      break;
+  }
+
   if (ui_usb_status_val != NULL)
   {
-    lv_label_set_text(ui_usb_status_val, "Connected");
+    lv_label_set_text(ui_usb_status_val, usb_status_text);
   }
 
   if (ui_playback_val != NULL)
   {
-    lv_label_set_text(ui_playback_val,
-                      (AUDIO_UI_GetPlaying() != 0U) ? "Active" : "Idle");
+    lv_label_set_text(ui_playback_val, playback_text);
   }
 
   if (ui_codec_val != NULL)
@@ -428,6 +489,21 @@ static void update_audio_info_ui(void)
     lv_label_set_text(ui_mute_val,
                       (AUDIO_UI_GetMuted() != 0U) ? "Muted" : "Off");
   }
+
+  if (ui_root_screen != NULL)
+  {
+    /* Force a full page redraw so the static labels and title stay in sync
+       with the dynamically updated value fields on this small partial-refresh panel. */
+    lv_obj_invalidate(ui_root_screen);
+  }
+}
+
+void UI_RequestAudioStatusRefresh(void)
+{
+  if (uiEventQueueHandle != NULL)
+  {
+    (void)osMessagePut(uiEventQueueHandle, UI_EVENT_AUDIO_REFRESH, 0U);
+  }
 }
 
 /* USER CODE END 4 */
@@ -439,28 +515,32 @@ static void create_audio_info_ui(void)
 {
   /* Get active screen */
   lv_obj_t *scr = lv_scr_act();
+  ui_root_screen = scr;
   
   /* Set background color to black */
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
 
   lv_obj_t *title = lv_label_create(scr);
-  lv_label_set_text(title, "USB AUDIO STATUS");
+  lv_label_set_text(title, "Audio Status");
+  lv_obj_set_width(title, 120);
+  lv_label_set_long_mode(title, LV_LABEL_LONG_CLIP);
+  lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
   lv_obj_set_style_text_color(title, lv_color_hex(0x00D0FF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_8, LV_PART_MAIN);
 
   lv_obj_t *line1 = lv_obj_create(scr);
   lv_obj_set_size(line1, 116, 2);
-  lv_obj_align(line1, LV_ALIGN_TOP_MID, 0, 28);
+  lv_obj_align(line1, LV_ALIGN_TOP_MID, 0, 24);
   lv_obj_set_style_bg_color(line1, lv_color_hex(0x00D0FF), LV_PART_MAIN);
   lv_obj_set_style_border_width(line1, 0, LV_PART_MAIN);
 
-  ui_usb_status_val = create_info_row(scr, "USB Link", 40);
-  ui_playback_val = create_info_row(scr, "Playback", 60);
-  ui_codec_val = create_info_row(scr, "Codec", 80);
-  ui_sample_rate_val = create_info_row(scr, "Sample Rate", 100);
-  ui_volume_val = create_info_row(scr, "Volume", 120);
-  ui_mute_val = create_info_row(scr, "Mute", 140);
+  ui_usb_status_val = create_info_row(scr, "USB Link", 34);
+  ui_playback_val = create_info_row(scr, "Playback", 50);
+  ui_codec_val = create_info_row(scr, "Codec", 66);
+  ui_sample_rate_val = create_info_row(scr, "Sample Rate", 82);
+  ui_volume_val = create_info_row(scr, "Volume", 98);
+  ui_mute_val = create_info_row(scr, "Mute", 114);
 
   update_audio_info_ui();
 }
@@ -501,13 +581,15 @@ void StartAudioTask(void const * argument)
 
 void StartLcdTask(void const * argument)
 {
-  uint32_t ui_update_tick = 0U;
+  uint32_t ui_refresh_tick = 0U;
+  osEvent ui_event;
 
   /* USER CODE BEGIN StartLcdTask */
   UNUSED(argument);
 
   /* Initialize LVGL and the display */
   lv_init();
+  lv_tick_set_cb(lvgl_tick_get_cb);
   lv_port_disp_init();
 
   /* Create USB Audio Information UI */
@@ -516,15 +598,23 @@ void StartLcdTask(void const * argument)
   /* Main loop: handle LVGL tasks with sufficient delay to avoid blocking audio */
   for(;;)
   {
-    if ((HAL_GetTick() - ui_update_tick) >= 200U)
+    ui_event = osMessageGet(uiEventQueueHandle, 30U);
+
+    if (ui_event.status == osEventMessage)
     {
       update_audio_info_ui();
-      ui_update_tick = HAL_GetTick();
+      ui_last_audio_update_counter = AUDIO_UI_GetUpdateCounter();
+      ui_refresh_tick = HAL_GetTick();
+    }
+    else if ((AUDIO_UI_GetUpdateCounter() != ui_last_audio_update_counter) ||
+             ((HAL_GetTick() - ui_refresh_tick) >= 500U))
+    {
+      update_audio_info_ui();
+      ui_last_audio_update_counter = AUDIO_UI_GetUpdateCounter();
+      ui_refresh_tick = HAL_GetTick();
     }
 
-    /* Handle LVGL tasks every 30ms (don't update too frequently) */
     lv_timer_handler();
-    osDelay(30);
   }
   /* USER CODE END StartLcdTask */
 }
