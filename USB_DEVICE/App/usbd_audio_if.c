@@ -179,6 +179,7 @@ static int8_t CS43L22_Write(uint8_t reg, uint8_t value);
 static int8_t CS43L22_Read(uint8_t reg, uint8_t *value);
 static uint8_t CS43L22_ConvertVolume(uint8_t volume);
 static void AUDIO_ClearUsbRingBuffer(void);
+static void AUDIO_ResetUsbStreamState(void);
 static int8_t AUDIO_StartPlaybackDma(void);
 static void AUDIO_StopPlaybackPath(void);
 static void AUDIO_UI_NotifyChanged(void);
@@ -538,6 +539,23 @@ static void AUDIO_ClearUsbRingBuffer(void)
   memset(haudio->buffer, 0, sizeof(haudio->buffer));
 }
 
+static void AUDIO_ResetUsbStreamState(void)
+{
+  USBD_AUDIO_HandleTypeDef *haudio;
+
+  haudio = (USBD_AUDIO_HandleTypeDef *)hUsbDeviceFS.pClassDataCmsit[hUsbDeviceFS.classId];
+
+  if (haudio == NULL)
+  {
+    return;
+  }
+
+  haudio->offset = AUDIO_OFFSET_UNKNOWN;
+  haudio->wr_ptr = 0U;
+  haudio->rd_ptr = 0U;
+  haudio->rd_enable = 0U;
+}
+
 static int8_t AUDIO_StartPlaybackDma(void)
 {
   HAL_StatusTypeDef status;
@@ -584,6 +602,7 @@ static void AUDIO_StopPlaybackPath(void)
    * shared ring buffer first so any tail immediately becomes silence.
    */
   AUDIO_ClearUsbRingBuffer();
+  AUDIO_ResetUsbStreamState();
 
   if (codec_initialized != 0U)
   {
