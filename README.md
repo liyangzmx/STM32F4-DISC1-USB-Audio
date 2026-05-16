@@ -1,12 +1,12 @@
 # STM32F407-DISC-Audio
 
-这是一个基于 `STM32F407 Discovery` 的 USB Audio + LCD 状态显示项目。
+这是一个基于 `STM32F407 Discovery` 的 USB Audio 项目，显示模块（OLED / LCD）作为可选功能。
 
 当前项目的主要目标是：
 
 - 将开发板做成一个 USB Audio Class 输出设备
 - 通过板载 `CS43L22` 编解码器输出音频
-- 使用 `1.8 寸 ST7735S LCD` 显示当前音频运行状态
+- 可选通过 `128x64 OLED`（I2C）或 `ST7735S LCD`（SPI）显示音频运行状态
 - 为后续功能扩展和二次开发保留清晰的工程结构
 
 这份 README 尽量按“接手文档”的标准来写，重点说明：
@@ -28,13 +28,13 @@
 - USB FS 音频播放设备（USB Audio Class 1.0）
 - 音频通过板载 `CS43L22` 输出
 - `I2S3 + DMA` 向 codec 持续送音频数据
-- `128 x 160` 的 ST7735S LCD 实时显示音频状态
-- 基于 LVGL 的轻量级状态页 UI
+- 显示模块可选（默认关闭），支持 `128x64 OLED`（I2C）或 `128x160 ST7735S LCD`（SPI）
+- 基于 LVGL 的轻量级状态页 UI（启用显示时）
 - 支持 macOS 侧音量与静音控制
 - 支持暂停/恢复播放
 - 支持 USB 拔插后的重新工作
 
-当前屏幕会显示这些信息：
+启用显示后屏幕会显示这些信息：
 
 - USB 链路状态
 - 播放状态
@@ -53,12 +53,7 @@
 
 - 板载音频 Codec：`CS43L22`
 - USB FS 设备接口
-- 1.8 寸 TFT LCD，控制器：`ST7735S`
-
-显示屏参数：
-
-- 分辨率：`128 x 160`
-- 当前按竖屏方式使用
+- 可选显示：`128x64 OLED`（I2C，当前默认）或 `1.8 寸 ST7735S TFT LCD`（128x160，SPI）
 
 ## 3. 软件架构
 
@@ -69,8 +64,8 @@
 - FreeRTOS（通过 CMSIS-RTOS 封装）
 - STM32 USB Device Library
 - USB Audio Class
-- LVGL v9
-- 自定义 ST7735S bit-bang 显示驱动
+- LVGL v9（显示启用时编译）
+- OLED 驱动（I2C）和 ST7735S LCD 驱动（bit-bang SPI）
 
 关键源码位置：
 
@@ -85,10 +80,14 @@
   - [usb_device.c](/opt/coding/stm32/STM32F407-DISC-Audio/USB_DEVICE/App/usb_device.c)
 - USB Audio 类核心：
   - [usbd_audio.c](/opt/coding/stm32/STM32F407-DISC-Audio/Middlewares/ST/STM32_USB_Device_Library/Class/AUDIO/Src/usbd_audio.c)
-- ST7735S 驱动：
+- OLED 驱动（I2C）：
+  - [oled_display.c](/opt/coding/stm32/STM32F407-DISC-Audio/Core/Src/oled_display.c)
+  - [oled_display.h](/opt/coding/stm32/STM32F407-DISC-Audio/Core/Inc/oled_display.h)
+- ST7735S 驱动（bit-bang SPI）：
   - [st7735_lcd.c](/opt/coding/stm32/STM32F407-DISC-Audio/Core/Src/st7735_lcd.c)
   - [st7735_lcd.h](/opt/coding/stm32/STM32F407-DISC-Audio/Core/Inc/st7735_lcd.h)
 - LVGL 显示适配层：
+  - [lv_port_disp_oled.c](/opt/coding/stm32/STM32F407-DISC-Audio/Middlewares/Third_Party/LVGL/lv_port_disp_oled.c)
   - [lv_port_disp_st7735s.c](/opt/coding/stm32/STM32F407-DISC-Audio/Middlewares/Third_Party/LVGL/lv_port_disp_st7735s.c)
 - FreeRTOS 配置：
   - [FreeRTOSConfig.h](/opt/coding/stm32/STM32F407-DISC-Audio/Core/Inc/FreeRTOSConfig.h)
@@ -163,11 +162,10 @@ cmake --build build/Release
 
 说明：
 
-- LVGL 源码通过递归方式加入编译
-- 自定义显示适配层也已加入编译
-- STM32CubeMX 生成的基础部分通过：
-  - `add_subdirectory(cmake/stm32cubemx)`
-  引入
+- 显示模块默认不编译（`ENABLE_DISPLAY=OFF`），固件仅约 50KB Flash / 36KB RAM
+- 启用显示：`cmake -DENABLE_DISPLAY=ON -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake ..`
+- 启用后 LVGL 源码和 OLED 驱动参与编译，固件约 502KB Flash / 88KB RAM
+- STM32CubeMX 生成的基础部分通过 `add_subdirectory(cmake/stm32cubemx)` 引入
 
 ## 6. 调试
 
@@ -223,6 +221,7 @@ cmake --build build/Release
 
 - STM32F4 HAL
 - `I2C1` 用于控制音频 Codec
+- `I2C2` 用于 OLED 显示（显示启用时）
 - `I2S3` 用于向 Codec 发送音频数据
 - `DMA1_Stream5` 用于 I2S TX DMA
 
@@ -279,7 +278,17 @@ cmake --build build/Release
 - MCLK：开启
 - 采样率：`48 kHz`
 
-### LCD：ST7735S
+### 显示：OLED（I2C，可选）
+
+- `PB3`  -> `OLED_RES`
+- `PB5`  -> `OLED_CS`
+- `PD6`  -> `OLED_DC`
+- `PB10` -> `OLED_SCL`（I2C2）
+- `PB11` -> `OLED_SDA`（I2C2）
+
+仅在 `ENABLE_DISPLAY=ON` 时初始化 I2C2 和 OLED。
+
+### LCD：ST7735S（备选）
 
 这块 LCD 目前用 GPIO 模拟串行接口，不是硬件 SPI，也不是 I2C。
 
@@ -333,7 +342,7 @@ cmake --build build/Release
 - 在任务上下文里处理音频启动/停止/初始化/反初始化
 - 避免在 USB 回调里做过重操作
 
-### `lcdTask`
+### `lcdTask`（仅 `ENABLE_DISPLAY=ON` 时创建）
 
 - 入口：`StartLcdTask`
 - 优先级：`osPriorityNormal`
@@ -343,12 +352,12 @@ cmake --build build/Release
 
 - 初始化 LVGL
 - 绑定 LVGL tick 到 `HAL_GetTick()`
-- 初始化 ST7735S 显示端口
+- 初始化显示端口（OLED 或 ST7735S）
 - 创建状态页 UI
 - 处理 UI 刷新消息
 - 调用 `lv_timer_handler()`
 
-### 消息队列
+### 消息队列（仅 `ENABLE_DISPLAY=ON` 时创建）
 
 当前用于 UI 刷新的队列：
 
@@ -420,35 +429,27 @@ UI 里通过：
 
 ## 11. 显示系统说明
 
+显示模块通过 CMake option `ENABLE_DISPLAY` 控制，默认关闭。
+
 主要文件：
 
-- [st7735_lcd.c](/opt/coding/stm32/STM32F407-DISC-Audio/Core/Src/st7735_lcd.c)
+- [oled_display.c](/opt/coding/stm32/STM32F407-DISC-Audio/Core/Src/oled_display.c)（OLED，当前默认）
+- [st7735_lcd.c](/opt/coding/stm32/STM32F407-DISC-Audio/Core/Src/st7735_lcd.c)（ST7735S 备选）
+- [lv_port_disp_oled.c](/opt/coding/stm32/STM32F407-DISC-Audio/Middlewares/Third_Party/LVGL/lv_port_disp_oled.c)
 - [lv_port_disp_st7735s.c](/opt/coding/stm32/STM32F407-DISC-Audio/Middlewares/Third_Party/LVGL/lv_port_disp_st7735s.c)
 - [main.c](/opt/coding/stm32/STM32F407-DISC-Audio/Core/Src/main.c)
 
-### 显示参数
+### 当前默认显示
 
-- 控制器：`ST7735S`
-- 分辨率：`128 x 160`
-- 颜色格式：`RGB565`
-- 当前按竖屏使用
+- 控制器：OLED SSD1306 兼容
+- 接口：I2C2，100kHz
+- 分辨率：`128 x 64`，单色
+- 颜色格式：`LV_COLOR_FORMAT_I1`
 
 ### LVGL 显示模式
 
-当前显示缓冲配置在：
-
-- [lv_port_disp_st7735s.c](/opt/coding/stm32/STM32F407-DISC-Audio/Middlewares/Third_Party/LVGL/lv_port_disp_st7735s.c)
-
-使用的是 partial buffer 模式。
-
-### 为什么 `ST7735_FillRect()` 改成逐行写
-
-之前在整屏刷新时，显示会出现“整屏变斜”的问题。最后确认更稳的方案是：
-
-- 每一行单独设置窗口
-- 每一行单独写像素
-
-虽然这样刷新速度会慢一些，但稳定性明显更好，尤其是当前 LCD 还是 bit-bang 驱动。
+- OLED 使用 full refresh 模式
+- ST7735S 使用 partial buffer 模式
 
 ## 12. LVGL 配置说明
 
@@ -459,15 +460,12 @@ UI 里通过：
 当前关键设置：
 
 - 横向分辨率：`128`
-- 纵向分辨率：`160`
-- 色深：`16-bit`
+- 纵向分辨率：`64`（OLED 模式）
+- 色深：`1-bit`（OLED）或 `16-bit`（ST7735S）
 
 已启用字体：
 
 - `Montserrat 8`
-- `Montserrat 10`
-- `Montserrat 12`
-- `Montserrat 14`
 
 当前 UI 特点：
 

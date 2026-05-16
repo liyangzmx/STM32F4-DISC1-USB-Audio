@@ -525,7 +525,9 @@ uint32_t AUDIO_UI_GetUpdateCounter(void)
 static void AUDIO_UI_NotifyChanged(void)
 {
   audio_ui_update_counter++;
+#if ENABLE_DISPLAY
   UI_RequestAudioStatusRefresh();
+#endif
 }
 
 static uint8_t AUDIO_ClampVolume(uint8_t volume)

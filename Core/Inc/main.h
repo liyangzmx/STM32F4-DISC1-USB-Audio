@@ -53,7 +53,9 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
+#if ENABLE_DISPLAY
 void UI_RequestAudioStatusRefresh(void);
+#endif
 
 /* USER CODE END EFP */
 
@@ -124,8 +126,13 @@ void UI_RequestAudioStatusRefresh(void);
 #define MEMS_INT2_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
+#if ENABLE_DISPLAY
 #define OLED_DC_Pin GPIO_PIN_6
 #define OLED_DC_GPIO_Port GPIOD
+#else
+#define OLED_DC_Pin 0U
+#define OLED_DC_GPIO_Port GPIOD
+#endif
 
 /* USER CODE END Private defines */
 

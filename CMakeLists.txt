@@ -42,26 +42,34 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
-# Add sources to executable
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    Core/Src/oled_display.c
-)
+# ---- Display support (optional, default OFF) ----
+option(ENABLE_DISPLAY "Enable OLED display + LVGL support" OFF)
 
-# Add LVGL sources
-file(GLOB_RECURSE LVGL_SOURCES
-    "Middlewares/Third_Party/LVGL/src/*.c"
-    "Middlewares/Third_Party/LVGL/lv_port_disp_oled.c"
-)
+if(ENABLE_DISPLAY)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE ENABLE_DISPLAY=1)
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    ${LVGL_SOURCES}
-)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+        Core/Src/oled_display.c
+    )
 
-# Add include paths
+    file(GLOB_RECURSE LVGL_SOURCES
+        "Middlewares/Third_Party/LVGL/src/*.c"
+        "Middlewares/Third_Party/LVGL/lv_port_disp_oled.c"
+    )
+
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+        ${LVGL_SOURCES}
+    )
+
+    target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+        Middlewares/Third_Party/LVGL
+        Middlewares/Third_Party/LVGL/src
+    )
+endif()
+
+# Add include paths (always needed)
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Inc
-    Middlewares/Third_Party/LVGL
-    Middlewares/Third_Party/LVGL/src
 )
 
 # Add project symbols (macros)

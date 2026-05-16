@@ -19,14 +19,18 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#if ENABLE_DISPLAY
 #include "oled_display.h"
+#endif
 #include "usb_device.h"
 #include "usbd_audio_if.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#if ENABLE_DISPLAY
 #include "lvgl.h"
 #include "lv_port_disp_oled.h"
+#endif
 #include "usbd_def.h"
 /* USER CODE END Includes */
 
@@ -54,9 +58,12 @@ DMA_HandleTypeDef hdma_spi3_tx;
 
 osThreadId defaultTaskHandle;
 osThreadId audioTaskHandle;
+#if ENABLE_DISPLAY
 osThreadId lcdTaskHandle;
 osMessageQId uiEventQueueHandle;
+#endif
 /* USER CODE BEGIN PV */
+#if ENABLE_DISPLAY
 static lv_obj_t *ui_usb_status_val = NULL;
 static lv_obj_t *ui_playback_val = NULL;
 static lv_obj_t *ui_codec_val = NULL;
@@ -65,6 +72,7 @@ static lv_obj_t *ui_volume_val = NULL;
 static lv_obj_t *ui_mute_val = NULL;
 static lv_obj_t *ui_root_screen = NULL;
 static uint32_t ui_last_audio_update_counter = 0U;
+#endif
 
 /* USER CODE END PV */
 
@@ -77,10 +85,14 @@ static void MX_I2C2_Init(void);
 static void MX_I2S3_Init(void);
 void StartDefaultTask(void const * argument);
 void StartAudioTask(void const * argument);
+#if ENABLE_DISPLAY
 void StartLcdTask(void const * argument);
+#endif
 
 /* USER CODE BEGIN PFP */
+#if ENABLE_DISPLAY
 static void create_audio_info_ui(void);
+#endif
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* USER CODE END PFP */
@@ -124,7 +136,9 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_I2C1_Init();
+#if ENABLE_DISPLAY
   MX_I2C2_Init();
+#endif
   MX_I2S3_Init();
   /* USER CODE BEGIN 2 */
 
@@ -143,9 +157,11 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
+#if ENABLE_DISPLAY
   /* definition and creation of uiEventQueue */
   osMessageQDef(uiEventQueue, 8, uint16_t);
   uiEventQueueHandle = osMessageCreate(osMessageQ(uiEventQueue), NULL);
+#endif
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -157,9 +173,11 @@ int main(void)
   osThreadDef(audioTask, StartAudioTask, osPriorityHigh, 0, 512);
   audioTaskHandle = osThreadCreate(osThread(audioTask), NULL);
 
+#if ENABLE_DISPLAY
   /* definition and creation of lcdTask */
   osThreadDef(lcdTask, StartLcdTask, osPriorityNormal, 0, 2048);
   lcdTaskHandle = osThreadCreate(osThread(lcdTask), NULL);
+#endif
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -436,6 +454,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+#if ENABLE_DISPLAY
 static uint32_t lvgl_tick_get_cb(void)
 {
   return HAL_GetTick();
@@ -552,18 +571,20 @@ void UI_RequestAudioStatusRefresh(void)
     (void)osMessagePut(uiEventQueueHandle, UI_EVENT_AUDIO_REFRESH, 0U);
   }
 }
+#endif
 
 /* USER CODE END 4 */
 
 /**
  * @brief Create USB Audio Information UI
  */
+#if ENABLE_DISPLAY
 static void create_audio_info_ui(void)
 {
   /* Get active screen */
   lv_obj_t *scr = lv_scr_act();
   ui_root_screen = scr;
-  
+
   /* Set background color to black */
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
 
@@ -591,6 +612,7 @@ static void create_audio_info_ui(void)
 
   update_audio_info_ui();
 }
+#endif
 
 /* USER CODE BEGIN Header_StartDefaultTask */
 /**
@@ -626,6 +648,7 @@ void StartAudioTask(void const * argument)
   /* USER CODE END StartAudioTask */
 }
 
+#if ENABLE_DISPLAY
 void StartLcdTask(void const * argument)
 {
   uint32_t ui_refresh_tick = 0U;
@@ -665,6 +688,7 @@ void StartLcdTask(void const * argument)
   }
   /* USER CODE END StartLcdTask */
 }
+#endif
 
 
 /**
